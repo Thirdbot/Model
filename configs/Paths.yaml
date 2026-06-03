@@ -1,0 +1,18 @@
+model_path:
+  name: models
+  sub_name: huggingface
+data_path:
+  name: data
+  sub_name: local
+save_path:
+  name: save
+  sub_name: models
+log_path:
+  name: logs
+  sub_name: wandb
+test_path:
+  name: test
+  sub_name: models
+train_path:
+  name: train
+  sub_name: checkpoints

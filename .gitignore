@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local editor files
+.idea/
+
+# Runtime outputs and artifacts
+logs/
+save/
+train/
+test/
+models/
+data/
