@@ -20,3 +20,4 @@ test/
 models/
 data/
 .cache/
+unsloth_compiled_cache/
