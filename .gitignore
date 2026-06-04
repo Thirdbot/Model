@@ -19,3 +19,4 @@ train/
 test/
 models/
 data/
+.cache/

@@ -1,7 +1,10 @@
 from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 from configs import load_config
-# CREATE STATIC FOLDERS & MODIFY SUB_FOLDER
+"""
+1. It needs to create the folder structure from config
+2. It needs to clean up the folder structure (if allowed)
+"""
 
 def load_config_to_path(root_path,config):
     folder = [Path(root_path) / Path(value.name) for key,value in config.items()]
