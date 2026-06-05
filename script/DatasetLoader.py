@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from datasets import load_dataset
+from configs import load_config
 
 """
 1. It needs to load the dataset from generated csv
@@ -11,7 +12,9 @@ from datasets import load_dataset
 
 def load_hf_dataset(local_path):
     local_path = Path(local_path)
-    cache_dir = local_path.parents[2] / ".cache" / "huggingface" / "datasets"
+    settings = load_config("paths")
+    root = Path(settings.root).resolve()
+    cache_dir = root / settings.dirs.datasets_cache
 
     if local_path.is_file():
         files = [local_path]

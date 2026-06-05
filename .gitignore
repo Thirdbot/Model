@@ -17,7 +17,5 @@ logs/
 save/
 train/
 test/
-models/
-data/
 .cache/
 unsloth_compiled_cache/

@@ -1,42 +1,31 @@
 from huggingface_hub import snapshot_download
-from slugify import slugify
-from transformers import Qwen3VLModel, AutoProcessor, AutoModel
+from configs import load_config
+from pathlib import Path
+from script.helper.model_solver import ModelSolver
 
 """
 It needs to handle the download of the model and dataset from huggingface hub
 """
 
-def download_setup(model_repo_id,local_dir):
-    model_specific_path = local_dir.joinpath(model_repo_id) # use model_repo_id as path
-    model_specific_path.mkdir(parents=True, exist_ok=True)
-    print(f"downloading model {model_repo_id} to {model_specific_path}")
-    return model_specific_path
+def get_hub_cache_dir(cache_dir=None):
+    settings = load_config('paths')
+    root = Path(settings.root).resolve()
+    return cache_dir or root / settings.dirs.hub_cache
 
-def download_QwenVL_model(model_repo_id,local_dir,cache_dir):
-    model_specific_path = download_setup(model_repo_id, local_dir)
 
-    model = Qwen3VLModel.from_pretrained(model_repo_id,cache_dir=cache_dir)
-    processor = AutoProcessor.from_pretrained(model_repo_id,cache_dir=cache_dir)
-    model.save_pretrained(model_specific_path)
-    processor.save_pretrained(model_specific_path)
-    return True
+def solve_model(model_repo_id_or_path, cache_dir=None,load_in_n_bit=4,unsloth_mode=True):
+    cache_dir = get_hub_cache_dir(cache_dir)
+    solver = ModelSolver(model_repo_id_or_path, cache_dir=cache_dir,load_in_n_bit=load_in_n_bit,unsloth_mode=unsloth_mode)
+    loaded = solver.solve()
+    return solver, loaded
 
-def download_InternVL_model(model_repo_id,local_dir,cache_dir):
-    model_specific_path = download_setup(model_repo_id, local_dir)
+def download_hf_dataset(dataset_repo_id, cache_dir=None):
 
-    model = AutoModel.from_pretrained(model_repo_id,cache_dir=cache_dir,trust_remote_code=True)
-    processor = AutoProcessor.from_pretrained(model_repo_id,cache_dir=cache_dir,trust_remote_code=True)
-    model.save_pretrained(model_specific_path)
-    processor.save_pretrained(model_specific_path)
-    return True
+    cache_dir = get_hub_cache_dir(cache_dir)
 
-def download_hf_dataset(dataset_repo_id,local_dir):
-    dataset_specific_name = slugify(dataset_repo_id,replacements=[["/","-"]])
-    dataset_specific_path = local_dir.joinpath(dataset_specific_name)
-    dataset_specific_path.mkdir(parents=True, exist_ok=True)
-    print(f"downloading dataset {dataset_repo_id} to {local_dir}")
+    print(f"downloading dataset {dataset_repo_id} to Hugging Face cache")
     return snapshot_download(
         repo_id=dataset_repo_id,
-        local_dir=dataset_specific_path,
-        repo_type="dataset"
+        repo_type="dataset",
+        cache_dir=str(cache_dir),
     )

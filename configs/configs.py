@@ -1,6 +1,11 @@
 import hydra
 
-def load_config(config_name:str = "Paths"):
+def load_config(config_name:str = "paths"):
+    '''
+    read any yaml files and return as dict
+    :param config_name:
+    :return: dict
+    '''
     with hydra.initialize(config_path="", version_base=None):
         cfg = hydra.compose(config_name=config_name)
     return cfg

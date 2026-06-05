@@ -1,0 +1,8 @@
+names:
+  CUSTOM: custom
+  CAUSALLM: causal
+  MULTI: multimodal
+  SPECIAL_VL: special_vision
+
+SPECIAL_VL_MODELS:
+  - internvl_chat

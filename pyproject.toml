@@ -14,5 +14,6 @@ dependencies = [
     "unsloth",
     "unsloth-zoo",
     "wandb>=0.27.0",
+    "pathvalidate>=3.3.1",
 ]
 
