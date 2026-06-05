@@ -25,7 +25,7 @@ if __name__ == "__main__":
     # create folders
     manager()
     # download model and dataset
-    model_solver, loaded_model = solve_model("qnguyen3/nanoLLaVA",
+    model_solver, loaded_model = solve_model("unsloth/Qwen2-VL-2B-Instruct-bnb-4bit",
                                              cache_dir=root / settings.dirs.hub_cache,
                                              load_in_n_bit=4,
                                              unsloth_mode=True )

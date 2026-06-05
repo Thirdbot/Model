@@ -1,6 +1,7 @@
-from unsloth import FastVisionModel,FastLanguageModel
+import json
 from pathlib import Path
 
+from unsloth import FastVisionModel,FastLanguageModel
 from huggingface_hub import auth_check, snapshot_download
 from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
 from transformers import (
@@ -9,6 +10,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
+    BitsAndBytesConfig
 )
 
 from configs import load_config
@@ -49,6 +51,7 @@ class ModelSolver:
         self.auto_map = {}
         self.llm_config = {}
         self.vision_config = {}
+        self.raw_config = {}
         self.MODEL_TYPES = self._get_model_types()
 
         self.model = None
@@ -57,18 +60,25 @@ class ModelSolver:
 
         self.unsloth_mode = unsloth_mode
         self.max_seq_length = 2048
-        # Quantized
+        # Quantized for unsloth
         self.load_in_n_bit = load_in_n_bit or None
         self.load_4_bit = True if self.load_in_n_bit == 4 else False
         self.load_8_bit = True if self.load_in_n_bit == 8 else False
         self.load_16_bit = True if self.load_in_n_bit == 16 else False
+
+        # Quantized for HF only 4 or 8
+        self.bnb_config = BitsAndBytesConfig(
+            load_in_4bit=self.load_4_bit,
+            load_in_8bit=self.load_8_bit,
+        )
         # Non-Quantized
         self.full_finetuning = True if self.load_in_n_bit is None else False
 
         # status
         self.load_with = None # unsloth or HF
         self.load_method = None # custom,causal,...
-        # Lora Parameters
+
+        # Lora Parameters for unsloth and hf
 
     def status_report(self):
         print(f"""
@@ -100,6 +110,7 @@ class ModelSolver:
         self.auto_map = getattr(self.config, "auto_map", {}) or {}
         self.llm_config = getattr(self.config, "llm_config", {}) or {}
         self.vision_config = getattr(self.config, "vision_config", {}) or {}
+        self._load_raw_config_fields() # fall-back when config.json is not reliable
 
         if self.auto_map:
             collectible_types.append(CUSTOM)
@@ -111,6 +122,37 @@ class ModelSolver:
             collectible_types.append(SPECIAL_VL)
 
         return collectible_types
+
+    def _load_raw_config_fields(self):
+        config_path = Path(self.source) / "config.json"
+        if not config_path.exists():
+            return
+
+        try:
+            self.raw_config = json.loads(config_path.read_text())
+        except Exception:
+            return
+
+        self.model_type = self.model_type or self.raw_config.get("model_type")
+        self.architectures = self.architectures or self.raw_config.get("architectures", [])
+        self.auto_map = self.auto_map or self.raw_config.get("auto_map", {})
+        self.llm_config = self.llm_config or self.raw_config.get("llm_config", {})
+        self.vision_config = self.vision_config or self.raw_config.get("vision_config", {})
+
+    def _load_tokenizer(self, source, trust_remote_code=False):
+        try:
+            return AutoTokenizer.from_pretrained(
+                source,
+                cache_dir=self.cache_dir,
+                trust_remote_code=trust_remote_code,
+            )
+        except Exception:
+            return AutoTokenizer.from_pretrained(
+                source,
+                cache_dir=self.cache_dir,
+                trust_remote_code=trust_remote_code,
+                use_fast=False,
+            )
 
     def _download_model(self):
         self.snapshot_path = snapshot_download(
@@ -146,37 +188,78 @@ class ModelSolver:
         return self.model, self.tokenizer
 
     def _load_causal(self, source):
+        # try to load causal model with unsloth or fall back to hf
+        # options to not quantize in unsloth
+        if self.unsloth_mode and not self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "Causal"
+                return self._load_llm_with_unsloth(source)
+            except Exception as error:
+                print(f"Could not load causal model with unsloth: {error}")
+        # options to quantize in unsloth
+        elif self.unsloth_mode and self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "Causal"
+                return self._load_llm_with_unsloth_quantized(source)
+            except Exception as error:
+                print(f"Could not load causal model with unsloth quantized: {error}")
+
+        # fall-back doing quantizing in hf
         try:
-            if self.unsloth_mode:
-                try:
-                    self.load_with = "unsloth"
-                    self.load_method = "Causal"
-                    return self._load_llm_with_unsloth(source)
-                except Exception as error:
-                    raise RuntimeError(f"Could not load causal model with unsloth: {error}") from error
-            model = AutoModelForCausalLM.from_pretrained(source, cache_dir=self.cache_dir)
-            tokenizer = AutoTokenizer.from_pretrained(source, cache_dir=self.cache_dir)
-            self.load_with = "huggingface"
-            self.load_method = "Causal"
-            return model, tokenizer
+            # not quantize in hf model
+            if not self.load_in_n_bit:
+                model = AutoModelForCausalLM.from_pretrained(source, cache_dir=self.cache_dir)
+                tokenizer = self._load_tokenizer(source)
+                self.load_with = "huggingface"
+                self.load_method = "Causal"
+                return model, tokenizer
+            # quantize in hf model
+            elif self.load_in_n_bit:
+                model = AutoModelForCausalLM.from_pretrained(source,
+                                                             cache_dir=self.cache_dir,
+                                                             quantization_config=self.bnb_config)
+                tokenizer = self._load_tokenizer(source)
+                self.load_with = "huggingface"
+                self.load_method = "Causal"
+                return model, tokenizer
+        # fall-back not doing quantizing or load in unsloth
         except Exception:
             model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
-            tokenizer = AutoTokenizer.from_pretrained(source, cache_dir=self.cache_dir)
+            tokenizer = self._load_tokenizer(source)
             self.load_with = "huggingface"
             self.load_method = "Causal"
             return model, tokenizer
 
     def _load_auto(self, source):
+        # try to load auto model with unsloth or fall back to hf
+        if self.unsloth_mode and not self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "Auto"
+                return self._load_llm_with_unsloth(source)
+            except Exception as error:
+                print(f"Could not load auto model with unsloth: {error}")
+        elif self.unsloth_mode and self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "Auto"
+                return self._load_llm_with_unsloth_quantized(source)
+            except Exception as error:
+                print(f"Could not load auto model with unsloth quantized: {error}")
+
+        # fall-back doing quantizing in hf
         try:
-            if self.unsloth_mode:
-                try:
-                    self.load_with = "unsloth"
-                    self.load_method = "Auto"
-                    return self._load_llm_with_unsloth(source)
-                except Exception as error:
-                    raise RuntimeError(f"Could not load auto model with unsloth: {error}") from error
-            model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
-            tokenizer = AutoTokenizer.from_pretrained(source, cache_dir=self.cache_dir)
+            if not self.load_in_n_bit:
+                model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
+            else:
+                model = AutoModel.from_pretrained(
+                    source,
+                    cache_dir=self.cache_dir,
+                    quantization_config=self.bnb_config,
+                )
+            tokenizer = self._load_tokenizer(source)
             self.load_with = "huggingface"
             self.load_method = "Auto"
             return model, tokenizer
@@ -184,43 +267,72 @@ class ModelSolver:
             raise RuntimeError(f"Could not load model with AutoModel: {error}") from error
 
     def _load_multi(self, source):
+        # try to load multimodal model with unsloth or fall back to hf
+        if self.unsloth_mode and not self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "Multi"
+                return self._load_vlm_with_unsloth(source)
+            except Exception as error:
+                print(f"Could not load multimodal model with unsloth: {error}")
+        elif self.unsloth_mode and self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "Multi"
+                return self._load_vlm_with_unsloth_quantized(source)
+            except Exception as error:
+                print(f"Could not load multimodal model with unsloth quantized: {error}")
+
+        # fall-back doing quantizing in hf
         try:
-            if self.unsloth_mode:
-                try:
-                    self.load_with = "unsloth"
-                    self.load_method = "Multi"
-                    return self._load_vlm_with_unsloth(source)
-                except Exception as error:
-                    raise RuntimeError(f"Could not load multimodal model with unsloth: {error}") from error
             self.load_with = "huggingface"
             self.load_method = "Multi"
-            model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
+            if not self.load_in_n_bit:
+                model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
+            else:
+                model = AutoModel.from_pretrained(
+                    source,
+                    cache_dir=self.cache_dir,
+                    quantization_config=self.bnb_config,
+                )
             processor = AutoProcessor.from_pretrained(source, cache_dir=self.cache_dir)
             return model, processor
         except Exception as error:
             raise RuntimeError(f"Could not load multimodal model: {error}") from error
 
     def _load_special_vision(self, source):
-        try:
-            if self.unsloth_mode:
-                try:
-                    self.load_with = "unsloth"
-                    self.load_method = "SpecialVL"
-                    return self._load_vlm_with_unsloth(source)
-                except Exception as error:
-                    raise RuntimeError(f"Could not load special vision model with unsloth: {error}") from error
+        # try to load special vision model with unsloth or fall back to hf
+        if self.unsloth_mode and not self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "SpecialVL"
+                return self._load_vlm_with_unsloth(source)
+            except Exception as error:
+                print(f"Could not load special vision model with unsloth: {error}")
+        elif self.unsloth_mode and self.load_in_n_bit:
+            try:
+                self.load_with = "unsloth"
+                self.load_method = "SpecialVL"
+                return self._load_vlm_with_unsloth_quantized(source)
+            except Exception as error:
+                print(f"Could not load special vision model with unsloth quantized: {error}")
 
-            model = AutoModel.from_pretrained(
-                source,
-                trust_remote_code=True,
-                cache_dir=self.cache_dir,
-            )
-            tokenizer = AutoTokenizer.from_pretrained(
-                source,
-                trust_remote_code=True,
-                use_fast=False,
-                cache_dir=self.cache_dir,
-            )
+        # fall-back doing quantizing in hf
+        try:
+            if not self.load_in_n_bit:
+                model = AutoModel.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                )
+            else:
+                model = AutoModel.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                    quantization_config=self.bnb_config,
+                )
+            tokenizer = self._load_tokenizer(source, trust_remote_code=True)
             self.load_with = "huggingface"
             self.load_method = "SpecialVL"
             return model, tokenizer
@@ -228,31 +340,75 @@ class ModelSolver:
             raise RuntimeError(f"Could not load special vision model: {error}") from error
 
     def _load_custom(self, source):
-        if "AutoModelForCausalLM" in self.auto_map:
-            model = AutoModelForCausalLM.from_pretrained(
-                source,
-                trust_remote_code=True,
-                cache_dir=self.cache_dir,
-            )
-        elif "AutoModel" in self.auto_map:
-            model = AutoModel.from_pretrained(
-                source,
-                trust_remote_code=True,
-                cache_dir=self.cache_dir,
-            )
-        else:
-            model = AutoModel.from_pretrained(
-                source,
-                trust_remote_code=True,
-                cache_dir=self.cache_dir,
-            )
+        # try to load custom model with unsloth or fall back to hf
+        if self.unsloth_mode and not self.load_in_n_bit:
+            try:
+                if MULTI in self.MODEL_TYPES or SPECIAL_VL in self.MODEL_TYPES:
+                    self.load_with = "unsloth"
+                    self.load_method = "Custom"
+                    return self._load_vlm_with_unsloth(source)
+                self.load_with = "unsloth"
+                self.load_method = "Custom"
+                return self._load_llm_with_unsloth(source)
+            except Exception as error:
+                print(f"Could not load custom model with unsloth: {error}")
+        elif self.unsloth_mode and self.load_in_n_bit:
+            try:
+                if MULTI in self.MODEL_TYPES or SPECIAL_VL in self.MODEL_TYPES:
+                    self.load_with = "unsloth"
+                    self.load_method = "Custom"
+                    return self._load_vlm_with_unsloth_quantized(source)
+                self.load_with = "unsloth"
+                self.load_method = "Custom"
+                return self._load_llm_with_unsloth_quantized(source)
+            except Exception as error:
+                print(f"Could not load custom model with unsloth quantized: {error}")
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            source,
-            trust_remote_code=True,
-            use_fast=False,
-            cache_dir=self.cache_dir,
-        )
+        # fall-back doing quantizing in hf
+        if "AutoModelForCausalLM" in self.auto_map:
+            if not self.load_in_n_bit:
+                model = AutoModelForCausalLM.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                )
+            else:
+                model = AutoModelForCausalLM.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                    quantization_config=self.bnb_config,
+                )
+        elif "AutoModel" in self.auto_map:
+            if not self.load_in_n_bit:
+                model = AutoModel.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                )
+            else:
+                model = AutoModel.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                    quantization_config=self.bnb_config,
+                )
+        else:
+            if not self.load_in_n_bit:
+                model = AutoModel.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                )
+            else:
+                model = AutoModel.from_pretrained(
+                    source,
+                    trust_remote_code=True,
+                    cache_dir=self.cache_dir,
+                    quantization_config=self.bnb_config,
+                )
+
+        tokenizer = self._load_tokenizer(source, trust_remote_code=True)
         try:
             processor = AutoProcessor.from_pretrained(
                 source,
@@ -270,14 +426,16 @@ class ModelSolver:
     def _load_llm_with_unsloth(self,source):
         model,tokenizer = FastLanguageModel.from_pretrained(
             model_name = source,
-            max_seq_length=self.max_seq_length
+            max_seq_length=self.max_seq_length,
+            use_gradient_checkpointing="unsloth"
         )
         return model,tokenizer
 
     def _load_vlm_with_unsloth(self,source):
         model, tokenizer = FastVisionModel.from_pretrained(
             model_name=source,
-            max_seq_length=self.max_seq_length
+            max_seq_length=self.max_seq_length,
+            use_gradient_checkpointing="unsloth"
         )
         return model, tokenizer
 
@@ -288,6 +446,7 @@ class ModelSolver:
             load_in_4bit=self.load_4_bit,
             load_in_8bit=self.load_8_bit,
             load_in_16bit=self.load_16_bit,
+            use_gradient_checkpointing="unsloth"
         )
         return model,tokenizer
 
@@ -297,7 +456,8 @@ class ModelSolver:
             max_seq_length=self.max_seq_length,
             load_in_4bit=self.load_4_bit,
             load_in_8bit=self.load_8_bit,
-            load_in_16bit=self.load_16_bit
+            load_in_16bit=self.load_16_bit,
+            use_gradient_checkpointing="unsloth"
         )
         return model,tokenizer
 
