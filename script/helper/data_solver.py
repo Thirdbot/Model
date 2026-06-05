@@ -17,18 +17,13 @@ class DataSolver:
     All this is pointing to huggingface dataset and it compatibility.
     """
 
-    def __init__(self, repo_id_or_dataset_path, load_in_n_bit=4, unsloth_mode=True):
+    def __init__(self, repo_id_or_dataset_path):
         self.repo_id_or_dataset_path = str(repo_id_or_dataset_path)
         self.source = self.repo_id_or_dataset_path
-        self.snapshot_path = None
         self.dataset = None
-        self.is_existed = False
         self.is_missing_path = False
         self.come_from_path = self._is_path()
         self.is_repo = not self.come_from_path and not self.is_missing_path
-        self.need_permission = False
-        self.need_download = self.is_repo
-        self.all_files = None
 
         # status
         self.modality = None  # vision / lang
@@ -121,9 +116,7 @@ class DataSolver:
                 return [path.name]
             return [file.name for file in path.rglob("*") if file.is_file()]
 
-        if not self.all_files:
-            return []
-        return [file.rfilename for file in self.all_files]
+        return []
 
     def _read_csv_columns(self):
         if not self.come_from_path:
@@ -165,9 +158,6 @@ class DataSolver:
         return traits
 
     def solve(self):
-        if self.need_permission:
-            raise PermissionError("The repo_id needs permission before it can be downloaded.")
-
         if self.is_repo:
             self.dataset = self._load_repo_dataset()
             self._modality_solver_from_dataset()
@@ -189,7 +179,6 @@ class DataSolver:
                 token=hf_token,
             )
         except GatedRepoError as error:
-            self.need_permission = True
             raise PermissionError("The repo_id needs permission before it can be loaded.") from error
         except RepositoryNotFoundError as error:
             raise FileNotFoundError(f"Dataset repo not found: {self.repo_id_or_dataset_path}") from error
@@ -261,14 +250,12 @@ class DataSolver:
     def _is_path(self):
         path = Path(self.source).expanduser()
         if path.exists():
-            self.is_existed = True
             self.source = str(path)
             return True
 
         if path.is_absolute() or self.source.startswith(("./", "../", "~")):
             self.is_missing_path = True
 
-        self.is_existed = False
         return False
 
 if __name__ == "__main__":

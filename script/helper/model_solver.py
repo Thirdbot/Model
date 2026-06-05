@@ -35,14 +35,8 @@ class ModelSolver:
     def __init__(self, repo_id_or_model_path, load_in_n_bit=4, unsloth_mode=True):
         self.repo_id_or_model_path = str(repo_id_or_model_path)
         self.source = self.repo_id_or_model_path
-        self.snapshot_path = None
 
-        self.is_existed = False
-        self.is_missing_path = False
-        self.come_from_path = self._is_path()
-        self.is_repo = not self.come_from_path and not self.is_missing_path
-        self.need_permission = False
-        self.need_download = False
+        self._resolve_local_path()
 
         self.config = self._get_config()
         self.model_type = None
@@ -83,6 +77,7 @@ class ModelSolver:
         self.lora_applied = False
         self.lora_backend = None
         self.lora_reason = None
+        self.lora_target_modules = []
 
         # Lora Parameters for unsloth and hf
         self.r = 16
@@ -93,7 +88,8 @@ class ModelSolver:
             r=self.r,
             lora_alpha=self.lora_alpha,
             lora_dropout=self.dropout,
-            bias="none"
+            bias="none",
+            target_modules=self._select_lora_target_modules(),
         )
 
     def status_report(self):
@@ -115,12 +111,10 @@ class ModelSolver:
         LoRA applied: {self.lora_applied}
         LoRA backend: {self.lora_backend}
         LoRA reason: {self.lora_reason}
+        LoRA target modules: {self.lora_target_modules}
         
         """)
     def solve(self):
-        if self.need_permission:
-            raise PermissionError("The repo_id needs permission before it can be downloaded.")
-
         return self._model_solver()
 
     def _get_model_types(self):
@@ -246,6 +240,7 @@ class ModelSolver:
             # load peft with huggingface
             if self.load_in_n_bit:
                 model = prepare_model_for_kbit_training(model)
+            self.peft_config = self._build_peft_config()
             self.lora_applied = True
             self.lora_backend = "huggingface"
             self.lora_reason = "Applied Hugging Face PEFT LoRA."
@@ -255,6 +250,60 @@ class ModelSolver:
         self.lora_backend = self.load_with
         self.lora_reason = "Skipped LoRA because model backend is unknown."
         return model
+
+    def _build_peft_config(self):
+        return LoraConfig(
+            r=self.r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.dropout,
+            bias="none",
+            target_modules=self._select_lora_target_modules(),
+        )
+
+    def _select_lora_target_modules(self):
+        if self.modality == "vision" or MULTI in self.MODEL_TYPES or SPECIAL_VL in self.MODEL_TYPES:
+            self.lora_target_modules = self._vision_language_target_modules()
+        elif CAUSALLM in self.MODEL_TYPES:
+            self.lora_target_modules = self._causal_lm_target_modules()
+        elif CUSTOM in self.MODEL_TYPES:
+            self.lora_target_modules = self._custom_target_modules()
+        else:
+            self.lora_target_modules = self._auto_target_modules()
+
+        return self.lora_target_modules
+
+    def _causal_lm_target_modules(self):
+        return [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ]
+
+    def _vision_language_target_modules(self):
+        return [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ]
+
+    def _custom_target_modules(self):
+        if self.modality == "vision" or MULTI in self.MODEL_TYPES or SPECIAL_VL in self.MODEL_TYPES:
+            return self._vision_language_target_modules()
+        return self._causal_lm_target_modules()
+
+    def _auto_target_modules(self):
+        model_type = (self.model_type or "").lower()
+        if any(marker in model_type for marker in ("bert", "roberta", "deberta", "electra")):
+            return ["query", "key", "value", "dense"]
+        return self._causal_lm_target_modules()
 
     def _model_solver(self):
         if SPECIAL_VL in self.MODEL_TYPES:
@@ -620,18 +669,10 @@ class ModelSolver:
         except Exception:
             return None
 
-    def _is_path(self):
+    def _resolve_local_path(self):
         path = Path(self.repo_id_or_model_path).expanduser()
         if path.exists():
-            self.is_existed = True
             self.source = str(path)
-            return True
-
-        if path.is_absolute() or self.repo_id_or_model_path.startswith(("./", "../", "~")):
-            self.is_missing_path = True
-
-        self.is_existed = False
-        return False
 
 if __name__ == "__main__":
     repo_id = "OpenGVLab/InternVL3-1B"
