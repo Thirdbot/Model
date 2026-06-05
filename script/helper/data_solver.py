@@ -1,13 +1,14 @@
 from pathlib import Path
 import csv
-
-from huggingface_hub import snapshot_download
-from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+from huggingface_hub.errors import GatedRepoError, HfHubHTTPError, RepositoryNotFoundError
+from datasets import Image, load_dataset
 
 class DataSolver:
     """
@@ -16,11 +17,11 @@ class DataSolver:
     All this is pointing to huggingface dataset and it compatibility.
     """
 
-    def __init__(self, repo_id_or_dataset_path, cache_dir=None, load_in_n_bit=4, unsloth_mode=True):
+    def __init__(self, repo_id_or_dataset_path, load_in_n_bit=4, unsloth_mode=True):
         self.repo_id_or_dataset_path = str(repo_id_or_dataset_path)
         self.source = self.repo_id_or_dataset_path
-        self.cache_dir = str(cache_dir) if cache_dir else None
         self.snapshot_path = None
+        self.dataset = None
         self.is_existed = False
         self.is_missing_path = False
         self.come_from_path = self._is_path()
@@ -45,8 +46,8 @@ class DataSolver:
 
     def status_report(self):
         print(f"""
-        Currently, loading {self.source} from {self.cache_dir}
-        Snapshot path: {self.snapshot_path}
+        Currently, loading {self.source}
+        Loaded with native datasets loader: {self.dataset is not None}
         Dataset format: {self.dataset_format}
         Modality: {self.modality}
         Modality reason: {self.modality_reason}
@@ -167,37 +168,95 @@ class DataSolver:
         if self.need_permission:
             raise PermissionError("The repo_id needs permission before it can be downloaded.")
 
-        if self.is_repo and self.need_download:
-            self._download_dataset()
-            self.come_from_path = True
-            self.all_files = None
-            self._modality_solver()
+        if self.is_repo:
+            self.dataset = self._load_repo_dataset()
+            self._modality_solver_from_dataset()
+            return self._dataset_solver()
+
+        if self.come_from_path:
+            self.dataset = self._load_local_dataset()
+            if self.dataset_format == "csv":
+                self._modality_solver()
+            else:
+                self._modality_solver_from_dataset()
 
         return self._dataset_solver()
 
-    def _download_dataset(self):
+    def _load_repo_dataset(self):
         try:
-            self.snapshot_path = snapshot_download(
-                repo_id=self.repo_id_or_dataset_path,
-                repo_type="dataset",
-                cache_dir=self.cache_dir,
+            return load_dataset(
+                self.repo_id_or_dataset_path,
                 token=hf_token,
             )
         except GatedRepoError as error:
             self.need_permission = True
-            raise PermissionError("The repo_id needs permission before it can be downloaded.") from error
+            raise PermissionError("The repo_id needs permission before it can be loaded.") from error
         except RepositoryNotFoundError as error:
             raise FileNotFoundError(f"Dataset repo not found: {self.repo_id_or_dataset_path}") from error
+        except HfHubHTTPError as error:
+            if error.response is not None and error.response.status_code == 429:
+                raise RuntimeError(
+                    "Hugging Face rate limited this dataset load. Wait a few minutes, then retry; "
+                    "the cache will resume already-downloaded files where possible."
+                ) from error
+            raise
 
-        self.source = self.snapshot_path
-        return self.snapshot_path
+    def _load_local_dataset(self):
+        path = Path(self.source)
+        if self.dataset_format == "csv":
+            data_files = str(path) if path.is_file() else [str(file) for file in path.rglob("*.csv")]
+            return load_dataset("csv", data_files=data_files)
+        if path.is_dir():
+            return load_dataset("imagefolder", data_dir=str(path))
+        raise RuntimeError(self.conversion_reason or f"Cannot load local dataset path: {self.source}")
+
+    def _modality_solver_from_dataset(self):
+        split = self._first_split()
+        if split is None:
+            self.dataset_format = "unknown"
+            self.modality = "unknown"
+            self.modality_reason = "Loaded dataset has no readable splits."
+            self.needs_conversion = True
+            self.conversion_reason = "Dataset loaded, but no split could be inspected."
+            return self.modality
+
+        self.csv_columns = list(getattr(split, "column_names", []) or [])
+        self.detected_column_traits = self._infer_column_traits(self.csv_columns)
+        self.dataset_format = "native"
+        self.needs_conversion = False
+        self.conversion_reason = None
+
+        features = getattr(split, "features", {}) or {}
+        has_image_feature = any(isinstance(feature, Image) for feature in features.values())
+        if has_image_feature:
+            self.modality = "vision"
+            self.modality_reason = "Native dataset has an Image feature."
+        elif "image_columns" in self.detected_column_traits:
+            self.modality = "vision"
+            self.modality_reason = "Native dataset has image-like columns."
+        elif "text_columns" in self.detected_column_traits or "instruction_columns" in self.detected_column_traits:
+            self.modality = "lang"
+            self.modality_reason = "Native dataset has text/instruction columns."
+        else:
+            self.modality = "unknown"
+            self.modality_reason = "Native dataset loaded, but columns do not clearly show modality."
+
+        return self.modality
+
+    def _first_split(self):
+        if self.dataset is None:
+            return None
+        if hasattr(self.dataset, "keys"):
+            for split_name in self.dataset.keys():
+                return self.dataset[split_name]
+        return self.dataset
 
     def _dataset_solver(self):
         """
-        Return the usable local dataset path for the next loader/trainer layer.
+        Return the loaded dataset when available; otherwise return the local source path.
         :return:
         """
-        return self.source
+        return self.dataset or self.source
 
     def _is_path(self):
         path = Path(self.source).expanduser()

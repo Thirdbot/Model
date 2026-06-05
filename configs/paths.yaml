@@ -1,10 +1,6 @@
 root: .
 
 dirs:
-    cache: .cache/huggingface
-    hub_cache: ${dirs.cache}/hub
-    datasets_cache: ${dirs.cache}/datasets
-    modules_cache: ${dirs.cache}/modules
     runs: runs
     logs: logs
     saves: save/models
@@ -17,10 +13,6 @@ subdirs:
   test_outputs: ${dirs.test}/models
 
 create:
-    - ${dirs.cache}
-    - ${dirs.hub_cache}
-    - ${dirs.datasets_cache}
-    - ${dirs.modules_cache}
     - ${dirs.runs}
     - ${dirs.logs}
     - ${dirs.saves}

@@ -17,6 +17,6 @@ logs/
 save/
 train/
 test/
-.cache/
 unsloth_compiled_cache/
+.cache/
 .env

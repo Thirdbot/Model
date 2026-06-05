@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-from huggingface_hub import auth_check, snapshot_download
-from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -28,24 +26,23 @@ SPECIAL_VL_MODELS = model_config_naming.SPECIAL_VL_MODELS
 
 class ModelSolver:
     """
-    Inspect a local path or Hugging Face repo id, download repo snapshots when
-    needed, then choose one loader path from detected model traits.
+    Inspect a local path or Hugging Face repo id, then choose one loader path
+    from detected model traits. Hugging Face loaders own cache resolution.
     Get a chat template or create a new one from types (this will be in a new config as template).
     Load model that is undergoing a transformation like Quantized after finished training for smoothly loading
     """
 
-    def __init__(self, repo_id_or_model_path, cache_dir=None,load_in_n_bit=4,unsloth_mode=True):
+    def __init__(self, repo_id_or_model_path, load_in_n_bit=4, unsloth_mode=True):
         self.repo_id_or_model_path = str(repo_id_or_model_path)
         self.source = self.repo_id_or_model_path
-        self.cache_dir = str(cache_dir) if cache_dir else None
         self.snapshot_path = None
 
         self.is_existed = False
         self.is_missing_path = False
         self.come_from_path = self._is_path()
-        self.is_repo = False
+        self.is_repo = not self.come_from_path and not self.is_missing_path
         self.need_permission = False
-        self.need_download = self._need_download()
+        self.need_download = False
 
         self.config = self._get_config()
         self.model_type = None
@@ -101,8 +98,8 @@ class ModelSolver:
 
     def status_report(self):
         print(f"""
-        Currently, loading {self.repo_id_or_model_path} from {self.cache_dir}
-        Snapshot path: {self.snapshot_path}
+        Currently, loading {self.repo_id_or_model_path}
+        Source used by loader: {self.source}
         Loading model type: {self.model_type}
         Detected model traits: {self.MODEL_TYPES}
         Architectures: {self.architectures}
@@ -123,11 +120,6 @@ class ModelSolver:
     def solve(self):
         if self.need_permission:
             raise PermissionError("The repo_id needs permission before it can be downloaded.")
-
-        if self.is_repo and self.need_download:
-            self._download_model()
-            self.config = self._get_config()
-            self.MODEL_TYPES = self._get_model_types()
 
         return self._model_solver()
 
@@ -193,13 +185,11 @@ class ModelSolver:
         try:
             return AutoTokenizer.from_pretrained(
                 source,
-                cache_dir=self.cache_dir,
                 trust_remote_code=trust_remote_code,
             )
         except Exception:
             return AutoTokenizer.from_pretrained(
                 source,
-                cache_dir=self.cache_dir,
                 trust_remote_code=trust_remote_code,
                 use_fast=False,
             )
@@ -209,15 +199,6 @@ class ModelSolver:
         self.unsloth_error = f"{message}: {error}"
         self.fallback_reason = "Unsloth load failed; using Hugging Face fallback."
         print(self.unsloth_error)
-
-    def _download_model(self):
-        self.snapshot_path = snapshot_download(
-            self.repo_id_or_model_path,
-            repo_type="model",
-            cache_dir=self.cache_dir,
-        )
-        self.source = self.snapshot_path
-        return self.snapshot_path
 
     def _apply_lora(self,model):
         if not self.use_lora:
@@ -333,7 +314,7 @@ class ModelSolver:
         try:
             # not quantize in hf model
             if not self.load_in_n_bit:
-                model = AutoModelForCausalLM.from_pretrained(source, cache_dir=self.cache_dir)
+                model = AutoModelForCausalLM.from_pretrained(source)
                 tokenizer = self._load_tokenizer(source)
                 self.load_with = "huggingface"
                 self.load_method = "Causal"
@@ -342,7 +323,6 @@ class ModelSolver:
             # quantize in hf model
             elif self.load_in_n_bit:
                 model = AutoModelForCausalLM.from_pretrained(source,
-                                                             cache_dir=self.cache_dir,
                                                              quantization_config=self.bnb_config)
                 tokenizer = self._load_tokenizer(source)
                 self.load_with = "huggingface"
@@ -351,7 +331,7 @@ class ModelSolver:
                 return model, tokenizer
         # fall-back not doing quantizing or load in unsloth
         except Exception:
-            model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
+            model = AutoModel.from_pretrained(source)
             tokenizer = self._load_tokenizer(source)
             self.load_with = "huggingface"
             self.load_method = "Causal"
@@ -382,11 +362,10 @@ class ModelSolver:
         # fall-back doing quantizing in hf
         try:
             if not self.load_in_n_bit:
-                model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
+                model = AutoModel.from_pretrained(source)
             else:
                 model = AutoModel.from_pretrained(
                     source,
-                    cache_dir=self.cache_dir,
                     quantization_config=self.bnb_config,
                 )
             tokenizer = self._load_tokenizer(source)
@@ -424,16 +403,14 @@ class ModelSolver:
             self.load_method = "Multi"
             self.modality = "vision"
             if not self.load_in_n_bit:
-                model = AutoModel.from_pretrained(source, cache_dir=self.cache_dir)
+                model = AutoModel.from_pretrained(source)
             else:
                 model = AutoModel.from_pretrained(
                     source,
-                    cache_dir=self.cache_dir,
                     quantization_config=self.bnb_config,
                 )
             processor = AutoProcessor.from_pretrained(
                 source,
-                cache_dir=self.cache_dir,
                 use_fast=False,
             )
             return model, processor
@@ -467,13 +444,11 @@ class ModelSolver:
                 model = AutoModel.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                 )
             else:
                 model = AutoModel.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                     quantization_config=self.bnb_config,
                 )
             tokenizer = self._load_tokenizer(source, trust_remote_code=True)
@@ -523,13 +498,11 @@ class ModelSolver:
                 model = AutoModelForCausalLM.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                 )
             else:
                 model = AutoModelForCausalLM.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                     quantization_config=self.bnb_config,
                 )
         elif "AutoModel" in self.auto_map:
@@ -537,13 +510,11 @@ class ModelSolver:
                 model = AutoModel.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                 )
             else:
                 model = AutoModel.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                     quantization_config=self.bnb_config,
                 )
         else:
@@ -551,13 +522,11 @@ class ModelSolver:
                 model = AutoModel.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                 )
             else:
                 model = AutoModel.from_pretrained(
                     source,
                     trust_remote_code=True,
-                    cache_dir=self.cache_dir,
                     quantization_config=self.bnb_config,
                 )
 
@@ -566,7 +535,6 @@ class ModelSolver:
             processor = AutoProcessor.from_pretrained(
                 source,
                 trust_remote_code=True,
-                cache_dir=self.cache_dir,
                 use_fast=False,
             )
             self.load_with = "huggingface"
@@ -648,7 +616,6 @@ class ModelSolver:
             return AutoConfig.from_pretrained(
                 self.source,
                 trust_remote_code=True,
-                cache_dir=self.cache_dir,
             )
         except Exception:
             return None
@@ -665,23 +632,6 @@ class ModelSolver:
 
         self.is_existed = False
         return False
-
-    def _need_download(self):
-        if self.come_from_path or self.is_missing_path:
-            return False
-
-        try:
-            auth_check(self.repo_id_or_model_path)
-            self.is_repo = True
-            return True
-        except GatedRepoError:
-            self.need_permission = True
-            self.is_repo = True
-            return True
-        except RepositoryNotFoundError:
-            self.is_repo = False
-            return False
-
 
 if __name__ == "__main__":
     repo_id = "OpenGVLab/InternVL3-1B"
