@@ -5,7 +5,10 @@ from configs import load_config
 
 class TrainerSolver:
     """
-    Needs to solve the trainer function including SFTTrainer and supported multiple types of models like UnslothModel and HFModel and PeftLoaded Model and will be working with runner for tracking experiment
+    Needs to solve the trainer function including SFTTrainer
+    and supported multiple types of models like UnslothModel
+    and HFModel and PeftLoaded Model and will be working
+    with runner for tracking experiment
     """
 
     def __init__(self,model=None,tokenizer=None,processor=None,dataset=None,training_args=None,tracking_args=None):
@@ -21,7 +24,8 @@ class TrainerSolver:
     def solve(self):
         pass
 
-    def _use_norm(self):
+    def _trainer(self):
         pass
+    
 if __name__ == "__main__":
     pass

@@ -12,8 +12,7 @@ os.environ["HF_DATASETS_CACHE"] = str(HF_CACHE / "datasets")
 os.environ["HF_MODULES_CACHE"] = str(HF_CACHE / "modules")
 
 from script.FolderManager import  manager,load_config
-from script.HuggingfaceDownload import download_hf_dataset, solve_model
-from script.DatasetLoader import load_hf_dataset
+from script.HuggingfaceDownload import solve_dataset, solve_model
 
 
 
@@ -29,8 +28,8 @@ if __name__ == "__main__":
                                              cache_dir=root / settings.dirs.hub_cache,
                                              load_in_n_bit=16,
                                              unsloth_mode=True )
-    dataset_path = download_hf_dataset(
-        "AdaptLLM/remote-sensing-visual-instructions",
+    dataset_solver, dataset_path = solve_dataset(
+        "intro/flickr8k",
         cache_dir=root / settings.dirs.hub_cache,
     )
 
@@ -38,7 +37,10 @@ if __name__ == "__main__":
     print("dataset snapshot:", dataset_path)
 
     model_solver.status_report()
+    dataset_solver.status_report()
 
-    load_hf_dataset(dataset_path)
+    if dataset_solver.needs_conversion:
+        raise RuntimeError(dataset_solver.conversion_reason)
+
     model,tokenizer = loaded_model[:2]
     # model, tokenizer = load_unsloth_visiontotext_model(select_model_path.as_posix())

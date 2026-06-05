@@ -19,3 +19,4 @@ train/
 test/
 .cache/
 unsloth_compiled_cache/
+.env

@@ -1,6 +1,6 @@
-from huggingface_hub import snapshot_download
 from configs import load_config
 from pathlib import Path
+from script.helper.data_solver import DataSolver
 from script.helper.model_solver import ModelSolver
 
 """
@@ -19,13 +19,16 @@ def solve_model(model_repo_id_or_path, cache_dir=None,load_in_n_bit=4,unsloth_mo
     loaded = solver.solve()
     return solver, loaded
 
+def solve_dataset(dataset_repo_id_or_path, cache_dir=None):
+    cache_dir = get_hub_cache_dir(cache_dir)
+    solver = DataSolver(dataset_repo_id_or_path, cache_dir=cache_dir)
+    dataset_path = solver.solve()
+    return solver, dataset_path
+
+def download_dataset(dataset_repo_id_or_path, cache_dir=None):
+    solver, dataset_path = solve_dataset(dataset_repo_id_or_path, cache_dir=cache_dir)
+    return dataset_path
+
 def download_hf_dataset(dataset_repo_id, cache_dir=None):
 
-    cache_dir = get_hub_cache_dir(cache_dir)
-
-    print(f"downloading dataset {dataset_repo_id} to Hugging Face cache")
-    return snapshot_download(
-        repo_id=dataset_repo_id,
-        repo_type="dataset",
-        cache_dir=str(cache_dir),
-    )
+    return download_dataset(dataset_repo_id, cache_dir=cache_dir)

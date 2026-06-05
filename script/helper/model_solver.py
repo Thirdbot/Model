@@ -30,6 +30,8 @@ class ModelSolver:
     """
     Inspect a local path or Hugging Face repo id, download repo snapshots when
     needed, then choose one loader path from detected model traits.
+    Get a chat template or create a new one from types (this will be in a new config as template).
+    Load model that is undergoing a transformation like Quantized after finished training for smoothly loading
     """
 
     def __init__(self, repo_id_or_model_path, cache_dir=None,load_in_n_bit=4,unsloth_mode=True):
