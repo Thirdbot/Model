@@ -5,7 +5,7 @@ class Collator:
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.processor = processor
-        self.text_tokenizer = getattr(processor, "tokenizer", None) or tokenizer
+        self.text_tokenizer = self._resolve_text_tokenizer(tokenizer, processor)
         self.assistant_marker_ids = self.text_tokenizer(
             self.ASSISTANT_MARKER,
             add_special_tokens=False,
@@ -71,3 +71,21 @@ class Collator:
             if values[index:index + pattern_length] == pattern:
                 return index
         return None
+
+    @staticmethod
+    def _resolve_text_tokenizer(tokenizer, processor):
+        candidates = [
+            getattr(processor, "tokenizer", None),
+            getattr(tokenizer, "tokenizer", None),
+            tokenizer,
+        ]
+
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if hasattr(candidate, "image_processor"):
+                continue
+            if hasattr(candidate, "encode") or hasattr(candidate, "batch_decode"):
+                return candidate
+
+        raise TypeError("Could not resolve a text tokenizer from tokenizer/processor.")
