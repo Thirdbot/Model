@@ -43,6 +43,8 @@ class HFTrainer:
             "remove_unused_columns":False, # no drop and should not drop unless you want to drop the columns
             "disable_tqdm": False,
             "report_to": "none",
+            "bf16": False,
+            "fp16": True,
             }
         self.grpo_config = grpo_config or {
             "output_dir": self.model_save_checkpoint_path.as_posix(),
@@ -61,6 +63,8 @@ class HFTrainer:
             "remove_unused_columns": False, # no drop and should not drop unless you want to drop the columns
             "disable_tqdm": False,
             "report_to": "none",
+            "bf16": False,
+            "fp16": True,
         }
         self.sft = self._set_sft_config(self.sft_config)
         self.grpo = self._set_grpo_config(self.grpo_config)
@@ -86,6 +90,7 @@ class HFTrainer:
                     model=self.model,
                     train_dataset=self.train_data,
                     eval_dataset=self.eval_data,
+                    processing_class=self.processor or self.tokenizer,
                     reward_funcs=think_format_reward,
                     args=self.grpo,
                 )

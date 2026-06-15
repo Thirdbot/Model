@@ -44,13 +44,21 @@ class Template:
         eval_dataset = second["train"]
         test_dataset = second["test"]
 
+
         train_dataset  = train_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
         eval_dataset = eval_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
         test_dataset = test_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
+        if self.temp_for == 'grpo':
+            return train_dataset,eval_dataset,test_dataset
 
-        train_dataset = train_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
-        eval_dataset = eval_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
-        test_dataset = test_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
+        elif self.temp_for == 'sft':
+            train_dataset = train_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
+            eval_dataset = eval_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
+            test_dataset = test_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
+        else:
+            train_dataset = train_dataset.map(self._formatting_prompts_func, batched=True, remove_columns="messages")
+            eval_dataset = eval_dataset.map(self._formatting_prompts_func, batched=True, remove_columns="messages")
+            test_dataset = test_dataset.map(self._formatting_prompts_func, batched=True, remove_columns="messages")
 
         return train_dataset,eval_dataset,test_dataset
 
@@ -106,20 +114,25 @@ class Template:
             else:
                 images.append(value)
 
-        for img_k in image_key:
-            value = example[img_k]
-
-            if isinstance(value, list):
-                images.extend(value)
-            else:
-                images.append(value)
-
         if self.temp_for == 'sft':
-            extend_data = {"messages":[value for value in packed_data.values() if value is not None],"images":images}
+            messages = [
+                value
+                for value in packed_data.values()
+                if value is not None and value["content"]
+            ]
+
+            extend_data = {"messages":messages,"images":images}
             return extend_data
         elif self.temp_for == 'grpo':
+            prompt = []
+
+            if packed_data["system_template"]["content"]:
+                prompt.append(packed_data["system_template"])
+
+            prompt.append(packed_data["user_template"])
+
             solution = example['solution']
-            extend_data = {"messages":[value for value in packed_data.values() if value is not None],"images":images,"solution":solution}
+            extend_data = {"prompt":prompt,"images":images,"target":solution}
             return extend_data
         else:
          return None
@@ -167,10 +180,6 @@ class Template:
     def _formatting_prompts_func(self,examples):
         convos = examples["messages"]
         texts = [self.tokenizer.apply_chat_template(convo, tokenize=self.set_tokenize, add_generation_prompt=self.set_add_generation_prompt) for convo in convos]
-        if self.temp_for == 'sft':
-            return {"text": texts}
-        elif self.temp_for == 'grpo':
-            return {"prompt": texts,}
         return {"text": texts,}
 
 
