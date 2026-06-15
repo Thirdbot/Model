@@ -14,7 +14,6 @@ if __name__ == "__main__":
     # create folders
     manager()
 
-
     # download model and dataset
     model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
                                              load_in_n_bit=16,
@@ -22,7 +21,6 @@ if __name__ == "__main__":
     dataset_solver, dataset = solve_dataset(
         "thirdExec/synthetic-seismic-vlm",
     )
-
 
     print("model source:", model_solver.source)
     print("dataset:", dataset)
@@ -35,6 +33,7 @@ if __name__ == "__main__":
         raise RuntimeError(dataset_solver.conversion_reason)
 
     model,tokenizer = loaded_model[:2]
+    processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
     dataset = dataset['train']
 

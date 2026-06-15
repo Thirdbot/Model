@@ -12,6 +12,8 @@ class Template:
         self.model_name = model_name
         self.dataset = dataset
         self.dataset_name = dataset_name
+        self.test_size = 0.2
+
         self.set_add_generation_prompt = False
         self.set_tokenize = False
 
@@ -28,11 +30,26 @@ class Template:
         self.owner_keys_save_path = self.map_config_save_path / self.model_name / f"{self.dataset_name}_owner.json"
         self._set_key_mapping(self.key_map,self.modal_keys_save_path) # map keys to category
         self._set_key_mapping(self.key_owner,self.owner_keys_save_path) # map keys to system | user | assistant
-        self.dataset = self._set_dataset_templated() # set template for dataset
-        self.tokenized_dataset = self.dataset.map(self._formatting_prompts_func, batched=True)
+
+
 
     def solve(self):
-        pass
+        first = self.dataset.train_test_split(test_size=self.test_size, shuffle=True)
+        second = first["test"].train_test_split(test_size=0.5, shuffle=True)
+
+        train_dataset = first["train"]
+        eval_dataset = second["train"]
+        test_dataset = second["test"]
+
+        train_dataset  = train_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
+        eval_dataset = eval_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
+        test_dataset = test_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
+
+        train_dataset = train_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
+        eval_dataset = eval_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
+        test_dataset = test_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
+
+        return train_dataset,eval_dataset,test_dataset
 
     def _set_key_mapping(self,keys,path):
         for key,value in keys.items():
@@ -54,9 +71,17 @@ class Template:
 
     @staticmethod
     def _collect(data,contents):
-       return [ contents[key] for key in data if key in contents.keys()]
+        store = []
+        for key in data:
+            if key in contents.keys():
+                if isinstance(contents[key],list):
+                    store.extend(contents[key]) # de-list
+                else:
+                    store.append(contents[key])
+        return store
 
     def _message_to_template(self,example):
+        image_key = getattr(self, 'image')
         packed_data,resolve = self._message_solver(example)
         system_owner = getattr(self,'system')
         user_owner = getattr(self,'user')
@@ -66,7 +91,17 @@ class Template:
         packed_data['user_template']['content'] = self._collect(user_owner,resolve)
         packed_data['assistant_template']['content'] = self._collect(assistant_owner,resolve)
 
-        extend_data = {"messages":[value for value in packed_data.values() if value is not None]}
+        images = []
+
+        for img_k in image_key:
+            value = example[img_k]
+
+            if isinstance(value, list):
+                images.extend(value)
+            else:
+                images.append(value)
+
+        extend_data = {"messages":[value for value in packed_data.values() if value is not None],"images":images}
         return extend_data
 
 
@@ -74,35 +109,30 @@ class Template:
         text = getattr(self,'text')
         image = getattr(self,'image')
 
-        text_content_resolve = {f"{text_col}": {"type":"text","text":example[text_col]} for text_col in text}
-        image_content_resolve = {f"{image_col}": {"type":"image"} for image_col in image}
+        text_content_resolve = {f"{text_col}": {"type":"text","text":f"{example[text_col]}\n"} for text_col in text}
+        image_content_resolve = {f"{image_col}": [{"type":"image"} for _ in range(0,len(example[image_col]) if isinstance(example[image_col],list) else 1)] for image_col in image}
 
         extends_content = text_content_resolve | image_content_resolve
 
 
         system = system or {
-                "role":self.system_role,
-                "content":self.system_message,
-            }
+            "role":self.system_role,
+            "content":self.system_message,
+        }
         user = user or {
-                "role":self.user_role,
-                "content":None
-            }
+            "role":self.user_role,
+            "content":None
+        }
         assistant = assistant or {
-                "role":self.assistant_role,
-                "content":None,
-            }
+            "role":self.assistant_role,
+            "content":None,
+        }
         return {
             "system_template": system,
             "user_template": user,
             "assistant_template": assistant,
         },extends_content
 
-    def _set_dataset_templated(self):
-        return self._dataset_format_to_template(self._message_to_template)
-
-    def _dataset_format_to_template(self,message):
-        return self.dataset.map(message)
 
     def _formatting_prompts_func(self,examples):
         convos = examples["messages"]
@@ -121,7 +151,8 @@ if __name__ == "__main__":
     dataset_path = "/home/third/Desktop/simulationv2/Dataset/multimodal_multi_image_dataset.csv"
     # dataset = read_csv(dataset_path)
     dataset_solver, dataset = solve_dataset(
-        "geshang/FCoT",
+        # "SakanaAI/JA-Multi-Image-VQA" #,
+        "geshang/FCoT"
     )
     dataset = dataset['train']
 
@@ -137,5 +168,5 @@ if __name__ == "__main__":
     }
 
     template = Template(dataset=dataset,tokenizer=tokenizer,model_name="geshang/Seg-R1-3B",dataset_name="geshang/FCoT",key_map=key_map,key_owner=key_owner)
-
-    print(template.tokenized_dataset[0])
+    train_dataset,eval_dataset,test_dataset = template.solve()
+    print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
