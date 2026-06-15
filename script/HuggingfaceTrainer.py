@@ -4,7 +4,7 @@ Trainer for huggingface model, suit for training custom model.
 from pathlib import Path
 
 from trl import GRPOTrainer, SFTTrainer, SFTConfig, GRPOConfig
-from trl.rewards import format_rewards,think_format_reward,other_rewards
+from script.reward import combined_reward
 from script.WandbLogger import WandbLogger
 
 from configs.configs import load_config
@@ -24,6 +24,7 @@ class HFTrainer:
         self.model = model
         self.model_name = model_name
         self.dataset_name = dataset_name
+        eos_token = self._resolve_eos_token(tokenizer, processor)
         self.root_path = Path(load_config("paths")['root'])
         self.model_save_path = self.root_path / load_config("paths")['dirs']['saves'] / self.model_name / self.dataset_name
         self.model_save_checkpoint_path = self.root_path / load_config("paths")['subdirs']['train_checkpoints'] / selected_trainer / self.model_name / self.dataset_name
@@ -60,8 +61,10 @@ class HFTrainer:
             "report_to": self.wandb.trainer_report_to(),
             "bf16": False,
             "fp16": False,
-            "eos_token": self.processor.tokenizer.eos_token,
             }
+        if eos_token is not None:
+            self.sft_config["eos_token"] = eos_token
+
         self.grpo_config = grpo_config or {
             "output_dir": self.model_save_checkpoint_path.as_posix(),
             "per_device_train_batch_size": self.batch_size,
@@ -101,6 +104,19 @@ class HFTrainer:
             **config
         )
 
+    @staticmethod
+    def _resolve_eos_token(tokenizer, processor):
+        candidates = [
+            getattr(processor, "tokenizer", None),
+            getattr(tokenizer, "tokenizer", None),
+            tokenizer,
+        ]
+        for candidate in candidates:
+            eos_token = getattr(candidate, "eos_token", None)
+            if eos_token:
+                return eos_token
+        return None
+
     def train_hf_model(self):
         self.wandb.start()
         try:
@@ -111,7 +127,7 @@ class HFTrainer:
                         train_dataset=self.train_data,
                         eval_dataset=self.eval_data,
                         processing_class=self.processor or self.tokenizer,
-                        reward_funcs=think_format_reward,
+                        reward_funcs=combined_reward,
                         args=self.grpo,
                     )
                     trainer.train()
