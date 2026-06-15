@@ -36,6 +36,7 @@ if __name__ == "__main__":
         raise RuntimeError(dataset_solver.conversion_reason)
 
     model,tokenizer = loaded_model[:2]
+    model.print_trainable_parameters()
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
     dataset = dataset['train']
@@ -48,7 +49,7 @@ if __name__ == "__main__":
     key_owner = {
         "system": ["instruction"],
         "user": ["problem", "images"],
-        "assistant": ["thinking","solution", "answer"],
+        "assistant": ["thinking","solution"],
     }
 
     template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B", dataset_name="thirdExec/synthetic-seismic-vlm",
