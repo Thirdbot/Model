@@ -42,6 +42,9 @@ if __name__ == "__main__":
         model.base_model.gradient_checkpointing_disable()
     model.config.use_cache = False
     model.enable_input_require_grads()
+    for name, p in model.named_parameters():
+        if p.requires_grad:
+            print(name)
 
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
