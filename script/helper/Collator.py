@@ -18,12 +18,15 @@ class Collator:
     def vision_language_collate(self,examples):
         print("using vision language collate")
         texts = [ex["text"] for ex in examples]
-        images = [
-            ex["images"][0]
-            if isinstance(ex["images"], list) and len(ex["images"]) == 1
-            else ex["images"]
-            for ex in examples
-        ]
+        images = []
+        for ex in examples:
+            example_images = ex["images"]
+            if not isinstance(example_images, list):
+                example_images = [example_images]
+            for image in example_images:
+                if getattr(image, "mode", None) != "RGB":
+                    image = image.convert("RGB")
+                images.append(image)
 
         batch = self.processor(
             text=texts,
