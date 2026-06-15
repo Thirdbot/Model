@@ -45,7 +45,7 @@ if __name__ == "__main__":
     for name, p in model.named_parameters():
         if p.requires_grad:
             print(name)
-
+    model.train()
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
     dataset = dataset['train']
@@ -69,8 +69,8 @@ if __name__ == "__main__":
 
     vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
     # check if collator is working
-    batch = vision_collator([train_dataset[0]])
-    print((batch["labels"] != -100).sum())
+    # batch = vision_collator([train_dataset[0]])
+    # print((batch["labels"] != -100).sum())
     trainer = HFTrainer(model_name="geshang/Seg-R1-3B",
                         dataset_name="thirdExec/synthetic-seismic-vlm",
                         train_data=train_dataset,
