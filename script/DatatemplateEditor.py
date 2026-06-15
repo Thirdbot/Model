@@ -4,15 +4,18 @@ Template and dataset alignment for compatibility, for now just only set up templ
 import json
 from pathlib import Path
 
+from numpy.distutils.fcompiler import none
+
 from configs import load_config
 
 class Template:
-    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False):
+    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft'):
         self.tokenizer = tokenizer
         self.model_name = model_name
         self.dataset = dataset
         self.dataset_name = dataset_name
         self.test_size = 0.2
+        self.temp_for = temp_for
 
         self.set_add_generation_prompt = False or set_add_generation_prompt
         self.set_tokenize = False
@@ -73,6 +76,8 @@ class Template:
     def _collect(data,contents):
         store = []
         for key in data:
+            if not key or not isinstance(key, str) or not key.strip():
+                continue
             if key in contents.keys():
                 if isinstance(contents[key],list):
                     store.extend(contents[key]) # de-list
@@ -101,16 +106,41 @@ class Template:
             else:
                 images.append(value)
 
-        extend_data = {"messages":[value for value in packed_data.values() if value is not None],"images":images}
-        return extend_data
+        for img_k in image_key:
+            value = example[img_k]
 
+            if isinstance(value, list):
+                images.extend(value)
+            else:
+                images.append(value)
+
+        if self.temp_for == 'sft':
+            extend_data = {"messages":[value for value in packed_data.values() if value is not None],"images":images}
+            return extend_data
+        elif self.temp_for == 'grpo':
+            solution = example['solution']
+            extend_data = {"messages":[value for value in packed_data.values() if value is not None],"images":images,"solution":solution}
+            return extend_data
+        else:
+         return None
+
+    def _valid_key(self, key, example=None):
+        if key is None:
+            return False
+        if not isinstance(key, str):
+            return False
+        if not key.strip():
+            return False
+        if example is not None and key not in example:
+            return False
+        return True
 
     def _message_solver(self,example,system=None,user=None,assistant=None):
         text = getattr(self,'text')
         image = getattr(self,'image')
 
-        text_content_resolve = {f"{text_col}": {"type":"text","text":f"{example[text_col]}\n"} for text_col in text}
-        image_content_resolve = {f"{image_col}": [{"type":"image"} for _ in range(0,len(example[image_col]) if isinstance(example[image_col],list) else 1)] for image_col in image}
+        text_content_resolve = {f"{text_col}": {"type":"text","text":f"{example[text_col]}\n"} for text_col in text if self._valid_key(text_col,example)}
+        image_content_resolve = {f"{image_col}": [{"type":"image"} for _ in range(0,len(example[image_col]) if isinstance(example[image_col],list) else 1)] for image_col in image if example[image_col] is not None}
 
         extends_content = text_content_resolve | image_content_resolve
 
@@ -137,7 +167,11 @@ class Template:
     def _formatting_prompts_func(self,examples):
         convos = examples["messages"]
         texts = [self.tokenizer.apply_chat_template(convo, tokenize=self.set_tokenize, add_generation_prompt=self.set_add_generation_prompt) for convo in convos]
-        return {"text": texts, }
+        if self.temp_for == 'sft':
+            return {"text": texts}
+        elif self.temp_for == 'grpo':
+            return {"prompt": texts,}
+        return {"text": texts,}
 
 
 if __name__ == "__main__":
