@@ -20,7 +20,7 @@ class HFTrainer:
         self.processor = processor
         self.tokenizer = tokenizer
         self.epochs = 100
-        self.batch_size = 4
+        self.batch_size = 1
         self.model = model
         self.model_name = model_name
         self.dataset_name = dataset_name
