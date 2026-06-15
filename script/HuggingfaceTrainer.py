@@ -19,7 +19,8 @@ class HFTrainer:
 
         self.processor = processor
         self.tokenizer = tokenizer
-        self.epochs = 5
+        self.epochs = 100
+        self.batch_size = 4
         self.model = model
         self.model_name = model_name
         self.dataset_name = dataset_name
@@ -40,7 +41,7 @@ class HFTrainer:
         )
         self.sft_config = sft_config or {
             "output_dir":self.model_save_checkpoint_path.as_posix(),
-            "per_device_train_batch_size":1,
+            "per_device_train_batch_size":self.batch_size,
             "gradient_accumulation_steps":8,
             "learning_rate":2e-5,
             "max_length":2048,
@@ -61,7 +62,7 @@ class HFTrainer:
             }
         self.grpo_config = grpo_config or {
             "output_dir": self.model_save_checkpoint_path.as_posix(),
-            "per_device_train_batch_size": 1,
+            "per_device_train_batch_size": self.batch_size,
             "gradient_accumulation_steps": 8,
             "learning_rate": 1e-6,
             "max_prompt_length": 1024,
