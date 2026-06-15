@@ -36,7 +36,7 @@ if __name__ == "__main__":
         raise RuntimeError(dataset_solver.conversion_reason)
 
     model,tokenizer = loaded_model[:2]
-    model.print_trainable_parameters()
+    # model.print_trainable_parameters()
     model.gradient_checkpointing_disable()
     if hasattr(model, "base_model"):
         model.base_model.gradient_checkpointing_disable()
