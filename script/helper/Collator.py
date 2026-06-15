@@ -16,7 +16,6 @@ class Collator:
         return batch
 
     def vision_language_collate(self,examples):
-        print("using vision language collate")
         texts = [ex["text"] for ex in examples]
         images = []
         for ex in examples:
