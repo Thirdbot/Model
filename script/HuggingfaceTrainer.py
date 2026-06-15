@@ -24,7 +24,7 @@ class HFTrainer:
         self.model = model
         self.model_name = model_name
         self.dataset_name = dataset_name
-        eos_token = self._resolve_eos_token(tokenizer, processor)
+        eos_token = self._normalize_eos_token(tokenizer, processor)
         self.root_path = Path(load_config("paths")['root'])
         self.model_save_path = self.root_path / load_config("paths")['dirs']['saves'] / self.model_name / self.dataset_name
         self.model_save_checkpoint_path = self.root_path / load_config("paths")['subdirs']['train_checkpoints'] / selected_trainer / self.model_name / self.dataset_name
@@ -105,21 +105,41 @@ class HFTrainer:
         )
 
     @staticmethod
-    def _resolve_eos_token(tokenizer, processor):
+    def _normalize_eos_token(tokenizer, processor):
         candidates = [
             getattr(processor, "tokenizer", None),
             getattr(tokenizer, "tokenizer", None),
             tokenizer,
         ]
+        resolved = None
         for candidate in candidates:
+            if candidate is None:
+                continue
+
             eos_token = getattr(candidate, "eos_token", None)
             if eos_token and eos_token != "<EOS_TOKEN>":
-                return eos_token
-            if candidate is not None:
-                vocab = candidate.get_vocab() if hasattr(candidate, "get_vocab") else {}
-                if "<|im_end|>" in vocab:
-                    return "<|im_end|>"
-        return None
+                resolved = eos_token
+                break
+
+            vocab = candidate.get_vocab() if hasattr(candidate, "get_vocab") else {}
+            if "<|im_end|>" in vocab:
+                resolved = "<|im_end|>"
+                break
+
+        if resolved is None:
+            resolved = "<|im_end|>"
+
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if hasattr(candidate, "eos_token"):
+                candidate.eos_token = resolved
+            if hasattr(candidate, "convert_tokens_to_ids") and hasattr(candidate, "eos_token_id"):
+                eos_token_id = candidate.convert_tokens_to_ids(resolved)
+                if eos_token_id is not None:
+                    candidate.eos_token_id = eos_token_id
+
+        return resolved
 
     def train_hf_model(self):
         self.wandb.start()
@@ -136,11 +156,13 @@ class HFTrainer:
                     )
                     trainer.train()
                 case 'sft':
+                    processing_class = self.processor or self.tokenizer
+                    self._normalize_eos_token(self.tokenizer, processing_class)
                     trainer = SFTTrainer(
                         model= self.model,
                         train_dataset= self.train_data,
                         eval_dataset= self.eval_data,
-                        processing_class= self.processor or self.tokenizer,
+                        processing_class= processing_class,
                         data_collator= self.collator,
                         args= self.sft,
                     )
