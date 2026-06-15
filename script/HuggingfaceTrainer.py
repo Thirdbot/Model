@@ -113,8 +113,12 @@ class HFTrainer:
         ]
         for candidate in candidates:
             eos_token = getattr(candidate, "eos_token", None)
-            if eos_token:
+            if eos_token and eos_token != "<EOS_TOKEN>":
                 return eos_token
+            if candidate is not None:
+                vocab = candidate.get_vocab() if hasattr(candidate, "get_vocab") else {}
+                if "<|im_end|>" in vocab:
+                    return "<|im_end|>"
         return None
 
     def train_hf_model(self):
