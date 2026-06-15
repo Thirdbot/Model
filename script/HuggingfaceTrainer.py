@@ -5,15 +5,14 @@ from pathlib import Path
 
 from trl import GRPOTrainer, SFTTrainer, SFTConfig, GRPOConfig
 from trl.rewards import format_rewards,think_format_reward,other_rewards
-from WandbLogger import WandbLogger
+from script.WandbLogger import WandbLogger
 
 from configs.configs import load_config
 
 
 class HFTrainer:
-    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,model_name,dataset_name,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None):
+    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,model_name,dataset_name,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None,wandb_logger=None):
 
-        self.wandb = WandbLogger()
         self.train_data = train_data
         self.test_data = test_data
         self.eval_data = eval_data
@@ -27,6 +26,17 @@ class HFTrainer:
         self.model_save_path = self.root_path / load_config("paths")['dirs']['saves'] / self.model_name / self.dataset_name
         self.model_save_checkpoint_path = self.root_path / load_config("paths")['subdirs']['train_checkpoints'] / selected_trainer / self.model_name / self.dataset_name
         self.selected_trainer = selected_trainer
+        self.wandb = wandb_logger or WandbLogger(
+            project="model",
+            run_name=WandbLogger.make_run_name(self.model_name, self.dataset_name, self.selected_trainer),
+            group=self.selected_trainer,
+            tags=[self.model_name, self.dataset_name, self.selected_trainer],
+            config={
+                "model_name": self.model_name,
+                "dataset_name": self.dataset_name,
+                "trainer": self.selected_trainer,
+            },
+        )
         self.sft_config = sft_config or {
             "output_dir":self.model_save_checkpoint_path.as_posix(),
             "per_device_train_batch_size":1,
@@ -43,7 +53,7 @@ class HFTrainer:
             "eval_steps": 50,
             "remove_unused_columns":False, # no drop and should not drop unless you want to drop the columns
             "disable_tqdm": False,
-            "report_to": "none",
+            "report_to": self.wandb.trainer_report_to(),
             "bf16": False,
             "fp16": True,
             }
@@ -63,7 +73,7 @@ class HFTrainer:
             "eval_steps": 50,
             "remove_unused_columns": False, # no drop and should not drop unless you want to drop the columns
             "disable_tqdm": False,
-            "report_to": "none",
+            "report_to": self.wandb.trainer_report_to(),
             "bf16": False,
             "fp16": False,
         }
@@ -85,30 +95,33 @@ class HFTrainer:
         )
 
     def train_hf_model(self):
-        match self.selected_trainer:
-            case 'grpo':
-                trainer = GRPOTrainer(
-                    model=self.model,
-                    train_dataset=self.train_data,
-                    eval_dataset=self.eval_data,
-                    processing_class=self.processor or self.tokenizer,
-                    reward_funcs=think_format_reward,
-                    report_to=,
-                    args=self.grpo,
-                )
-                trainer.train()
-            case 'sft':
-                trainer = SFTTrainer(
-                    model= self.model,
-                    train_dataset= self.train_data,
-                    eval_dataset= self.eval_data,
-                    processing_class= self.processor or self.tokenizer,
-                    data_collator= self.collator,
-                    args= self.sft,
-                )
-                trainer.train()
-            case _:
-                raise ValueError("Invalid trainer selected.")
+        self.wandb.start()
+        try:
+            match self.selected_trainer:
+                case 'grpo':
+                    trainer = GRPOTrainer(
+                        model=self.model,
+                        train_dataset=self.train_data,
+                        eval_dataset=self.eval_data,
+                        processing_class=self.processor or self.tokenizer,
+                        reward_funcs=think_format_reward,
+                        args=self.grpo,
+                    )
+                    trainer.train()
+                case 'sft':
+                    trainer = SFTTrainer(
+                        model= self.model,
+                        train_dataset= self.train_data,
+                        eval_dataset= self.eval_data,
+                        processing_class= self.processor or self.tokenizer,
+                        data_collator= self.collator,
+                        args= self.sft,
+                    )
+                    trainer.train()
+                case _:
+                    raise ValueError("Invalid trainer selected.")
+        finally:
+            self.wandb.finish()
 
 # sft training and grpo training
 
