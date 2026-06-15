@@ -6,6 +6,7 @@ dirs:
     saves: save/models
     train: train
     test: test
+    template: templates
 
 subdirs:
   wandb: ${dirs.logs}/wandb

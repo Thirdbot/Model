@@ -1,0 +1,28 @@
+{%- for message in messages %}
+{%- if message['role'] == 'system' %}
+<|system|>
+{{ message['content'] | trim }}
+
+{%- elif message['role'] == 'user' %}
+<|user|>
+{%- if message['content'] is string %}
+{{ message['content'] | trim }}
+{%- else %}
+{%- for item in message['content'] %}
+{%- if item['type'] == 'image' %}
+<image>
+{%- elif item['type'] == 'text' %}
+{{ item['text'] | trim }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+{%- elif message['role'] == 'assistant' %}
+<|assistant|>
+{{ message['content'] | trim }}
+
+{%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+<|assistant|>
+{%- endif %}
