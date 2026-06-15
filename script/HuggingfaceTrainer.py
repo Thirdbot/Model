@@ -124,6 +124,7 @@ if __name__ == "__main__":
     )
     dataset = dataset['train']
 
+    # SFT
     key_map = {
         "image": ["image"],
         "text": ["thinking", "problem", "solution"],
@@ -151,4 +152,34 @@ if __name__ == "__main__":
                         processor=processor,
                         collator=vision_collator,
                         selected_trainer='sft')
+    trainer.train_hf_model()
+
+    #GRPO
+    key_map = {
+        "image": ["image"],
+        "text": ["problem",], # don't use solutions
+    }
+
+    key_owner = {
+        "system": ["system_prompt"],
+        "user": ["problem", "image"],
+        "assistant": [],
+    }
+
+    template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
+                        dataset_name="geshang/FCoT", key_map=key_map, key_owner=key_owner,set_add_generation_prompt=True) # for model to generate answer
+    train_dataset, eval_dataset, test_dataset = template.solve()
+    print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
+
+    vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
+    trainer = HFTrainer(model_name="geshang/Seg-R1-3B",
+                        dataset_name="geshang/FCoT",
+                        train_data=train_dataset,
+                        eval_data=eval_dataset,
+                        test_data=test_dataset,
+                        model=model,
+                        tokenizer=tokenizer,
+                        processor=processor,
+                        collator=vision_collator,
+                        selected_trainer='grpo')
     trainer.train_hf_model()

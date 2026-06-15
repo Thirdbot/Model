@@ -101,9 +101,9 @@ class ModelSolver:
         Detected model traits: {self.MODEL_TYPES}
         Architectures: {self.architectures}
         Auto map keys: {list(self.auto_map.keys()) if self.auto_map else []}
-        Unsloth requested: {self.unsloth_mode}
-        Unsloth attempted: {self.unsloth_attempted}
-        Unsloth error: {self.unsloth_error}
+        unsloth requested: {self.unsloth_mode}
+        unsloth attempted: {self.unsloth_attempted}
+        unsloth error: {self.unsloth_error}
         Fallback reason: {self.fallback_reason}
         Loading with Quantized n bits: {self.load_in_n_bit}
         Loading with Framework: {self.load_with}

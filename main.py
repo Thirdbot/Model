@@ -2,6 +2,9 @@ import os
 import sys
 from pathlib import Path
 
+from script.HuggingfaceTrainer import HFTrainer
+from script.helper.Collator import Collator
+
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
@@ -38,42 +41,35 @@ if __name__ == "__main__":
     dataset = dataset['train']
 
     key_map = {
-        "image": ["image_paths"],
-        "text": ["instruction", "question","reason","","answer"],
+        "image": ["images"],
+        "text": ["instruction", "problem","thinking","solution","answer"],
     }
 
     key_owner = {
         "system": ["instruction"],
-        "user": ["question", "image_paths"],
-        "assistant": ["reason", "answer"],
+        "user": ["problem", "images"],
+        "assistant": ["thinking","solution", "answer"],
     }
 
     template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B", dataset_name="thirdExec/synthetic-seismic-vlm",
-                        key_map=key_map, key_owner=key_owner,system_message="""
-                        You are a seismic segmentation assistant.
-                        Use all provided images as evidence.
-                        Output coordinates only in the coordinate system of Picture 1, the global image.
-                        Return exactly:
-                        <think>...</think>
-                        <bbox>[x1,y1,x2,y2]</bbox>
-                """)
+                        key_map=key_map, key_owner=key_owner,set_add_generation_prompt=False)
 
-    print("model template:",tokenizer.chat_template)
+    train_dataset, eval_dataset, test_dataset = template.solve()
+    print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
-    messages = [
-        {
-            ""
-        }
-    ]
+    vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
+    trainer = HFTrainer(model_name="geshang/Seg-R1-3B",
+                        dataset_name="thirdExec/synthetic-seismic-vlm",
+                        train_data=train_dataset,
+                        eval_data=eval_dataset,
+                        test_data=test_dataset,
+                        model=model,
+                        tokenizer=tokenizer,
+                        processor=processor,
+                        collator=vision_collator,
+                        selected_trainer='sft')
+    trainer.train_hf_model()
 
-    chat_inputs = tokenizer.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_tensors="pt"
-    )
-
-    # print(tokenizer.decode(chat_inputs[0]))
 
 """
 replicate training from paper first for stable pipeline. then keep training,changing architecture,changing dataset https://arxiv.org/pdf/2506.22624

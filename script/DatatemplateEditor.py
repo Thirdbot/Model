@@ -7,14 +7,14 @@ from pathlib import Path
 from configs import load_config
 
 class Template:
-    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message=""):
+    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False):
         self.tokenizer = tokenizer
         self.model_name = model_name
         self.dataset = dataset
         self.dataset_name = dataset_name
         self.test_size = 0.2
 
-        self.set_add_generation_prompt = False
+        self.set_add_generation_prompt = False or set_add_generation_prompt
         self.set_tokenize = False
 
         self.root_path = Path(load_config("paths")['root']).resolve()
