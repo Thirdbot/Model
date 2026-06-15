@@ -37,6 +37,9 @@ if __name__ == "__main__":
 
     model,tokenizer = loaded_model[:2]
     model.print_trainable_parameters()
+    model.gradient_checkpointing_disable()
+    model.config.use_cache = False
+
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
     dataset = dataset['train']
