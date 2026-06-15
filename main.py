@@ -38,7 +38,10 @@ if __name__ == "__main__":
     model,tokenizer = loaded_model[:2]
     model.print_trainable_parameters()
     model.gradient_checkpointing_disable()
+    if hasattr(model, "base_model"):
+        model.base_model.gradient_checkpointing_disable()
     model.config.use_cache = False
+    model.enable_input_require_grads()
 
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
@@ -62,6 +65,9 @@ if __name__ == "__main__":
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
     vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
+    # check if collator is working
+    batch = vision_collator([train_dataset[0]])
+    print((batch["labels"] != -100).sum())
     trainer = HFTrainer(model_name="geshang/Seg-R1-3B",
                         dataset_name="thirdExec/synthetic-seismic-vlm",
                         train_data=train_dataset,
