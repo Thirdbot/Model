@@ -20,7 +20,7 @@ if __name__ == "__main__":
     # download model and dataset
     model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
                                              load_in_n_bit=4,
-                                             unsloth_mode=False )
+                                             unsloth_mode=True )
     dataset_solver, dataset = solve_dataset(
         "thirdExec/synthetic-seismic-vlm",
     )
@@ -42,9 +42,9 @@ if __name__ == "__main__":
         model.base_model.gradient_checkpointing_disable()
     model.config.use_cache = False
     model.enable_input_require_grads()
-    for name, p in model.named_parameters():
-        if p.requires_grad:
-            print(name)
+    # for name, p in model.named_parameters():
+    #     if p.requires_grad:
+    #         print(name)
     model.train()
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
