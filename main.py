@@ -19,7 +19,7 @@ if __name__ == "__main__":
 
     # download model and dataset
     model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
-                                             load_in_n_bit=None,
+                                             load_in_n_bit=4,
                                              unsloth_mode=False )
     dataset_solver, dataset = solve_dataset(
         "thirdExec/synthetic-seismic-vlm",
