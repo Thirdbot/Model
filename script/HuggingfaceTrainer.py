@@ -5,7 +5,7 @@ from pathlib import Path
 
 from trl import GRPOTrainer, SFTTrainer, SFTConfig, GRPOConfig
 from trl.rewards import format_rewards,think_format_reward,other_rewards
-
+from WandbLogger import WandbLogger
 
 from configs.configs import load_config
 
@@ -13,6 +13,7 @@ from configs.configs import load_config
 class HFTrainer:
     def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,model_name,dataset_name,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None):
 
+        self.wandb = WandbLogger()
         self.train_data = train_data
         self.test_data = test_data
         self.eval_data = eval_data
@@ -57,14 +58,14 @@ class HFTrainer:
             "save_strategy": "steps",
             "save_total_limit": 2,
             "logging_steps": 1,
-            "max_steps": 10,
+            "max_steps": 1,
             "eval_strategy": "steps",
             "eval_steps": 50,
             "remove_unused_columns": False, # no drop and should not drop unless you want to drop the columns
             "disable_tqdm": False,
             "report_to": "none",
             "bf16": False,
-            "fp16": True,
+            "fp16": False,
         }
         self.sft = self._set_sft_config(self.sft_config)
         self.grpo = self._set_grpo_config(self.grpo_config)
@@ -92,6 +93,7 @@ class HFTrainer:
                     eval_dataset=self.eval_data,
                     processing_class=self.processor or self.tokenizer,
                     reward_funcs=think_format_reward,
+                    report_to=,
                     args=self.grpo,
                 )
                 trainer.train()
@@ -116,7 +118,7 @@ if __name__ == "__main__":
     from script.helper.Collator import Collator
 
     model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
-                                             load_in_n_bit=16,
+                                             load_in_n_bit=4,
                                              unsloth_mode=False)
     model, tokenizer = loaded_model[:2]
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
@@ -127,6 +129,7 @@ if __name__ == "__main__":
         # "SakanaAI/JA-Multi-Image-VQA" #,
         "geshang/FCoT"
     )
+    model.print_trainable_parameters()
     dataset = dataset['train']
 
     # SFT
