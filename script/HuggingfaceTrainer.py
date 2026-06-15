@@ -7,7 +7,7 @@ from trl import GRPOTrainer, SFTTrainer, SFTConfig, GRPOConfig
 from trl.rewards import format_rewards,think_format_reward,other_rewards
 
 
-from configs import load_config
+from configs.configs import load_config
 
 
 class HFTrainer:
@@ -34,9 +34,15 @@ class HFTrainer:
             "max_length":2048,
             "dataset_text_field":"text",
             "save_steps": 10,
+            "save_strategy": "steps",
+            "save_total_limit": 2,
             "logging_steps": 1,
             "max_steps": 10,
+            "eval_strategy": "steps",
+            "eval_steps": 50,
             "remove_unused_columns":False, # no drop and should not drop unless you want to drop the columns
+            "disable_tqdm": False,
+            "report_to": "none",
             }
         self.grpo_config = grpo_config or {
             "output_dir": self.model_save_checkpoint_path.as_posix(),
@@ -46,9 +52,15 @@ class HFTrainer:
             "max_prompt_length": 1024,
             "max_completion_length": 512,
             "save_steps": 10,
+            "save_strategy": "steps",
+            "save_total_limit": 2,
             "logging_steps": 1,
             "max_steps": 10,
+            "eval_strategy": "steps",
+            "eval_steps": 50,
             "remove_unused_columns": False, # no drop and should not drop unless you want to drop the columns
+            "disable_tqdm": False,
+            "report_to": "none",
         }
         self.sft = self._set_sft_config(self.sft_config)
         self.grpo = self._set_grpo_config(self.grpo_config)
@@ -96,14 +108,14 @@ class HFTrainer:
 if __name__ == "__main__":
     from script.HuggingfaceDownload import solve_model, solve_dataset
     from script.DatatemplateEditor import Template
-    from helper.Collator import Collator
+    from script.helper.Collator import Collator
 
     model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
                                              load_in_n_bit=16,
                                              unsloth_mode=False)
     model, tokenizer = loaded_model[:2]
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
-
+    model_solver.status_report()
     dataset_path = "/home/third/Desktop/simulationv2/Dataset/multimodal_multi_image_dataset.csv"
     # dataset = read_csv(dataset_path)
     dataset_solver, dataset = solve_dataset(

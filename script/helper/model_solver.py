@@ -5,6 +5,7 @@ from transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoProcessor,
     AutoTokenizer,
     BitsAndBytesConfig
@@ -307,8 +308,14 @@ class ModelSolver:
 
     def _model_solver(self):
         if SPECIAL_VL in self.MODEL_TYPES:
-            self.model, self.tokenizer = self._load_special_vision(self.source)
+            loaded = self._load_special_vision(self.source)
+            self.model = loaded[0]
+            self.tokenizer = loaded[1]
+            if len(loaded) == 3:
+                self.processor = loaded[2]
             self.model = self._apply_lora(self.model)
+            if self.processor is not None:
+                return self.model, self.tokenizer, self.processor
             return self.model, self.tokenizer
 
         if CUSTOM in self.MODEL_TYPES:
@@ -452,9 +459,9 @@ class ModelSolver:
             self.load_method = "Multi"
             self.modality = "vision"
             if not self.load_in_n_bit:
-                model = AutoModel.from_pretrained(source)
+                model = AutoModelForImageTextToText.from_pretrained(source)
             else:
-                model = AutoModel.from_pretrained(
+                model = AutoModelForImageTextToText.from_pretrained(
                     source,
                     quantization_config=self.bnb_config,
                 )
@@ -490,21 +497,26 @@ class ModelSolver:
         # fall-back doing quantizing in hf
         try:
             if not self.load_in_n_bit:
-                model = AutoModel.from_pretrained(
+                model = AutoModelForImageTextToText.from_pretrained(
                     source,
                     trust_remote_code=True,
                 )
             else:
-                model = AutoModel.from_pretrained(
+                model = AutoModelForImageTextToText.from_pretrained(
                     source,
                     trust_remote_code=True,
                     quantization_config=self.bnb_config,
                 )
             tokenizer = self._load_tokenizer(source, trust_remote_code=True)
+            processor = AutoProcessor.from_pretrained(
+                source,
+                trust_remote_code=True,
+                use_fast=False,
+            )
             self.load_with = "huggingface"
             self.load_method = "SpecialVL"
             self.modality = "vision"
-            return model, tokenizer
+            return model, tokenizer, processor
         except Exception as error:
             raise RuntimeError(f"Could not load special vision model: {error}") from error
 

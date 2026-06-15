@@ -18,7 +18,12 @@ class Collator:
     def vision_language_collate(self,examples):
         print("using vision language collate")
         texts = [ex["text"] for ex in examples]
-        images = [ex["images"] for ex in examples]
+        images = [
+            ex["images"][0]
+            if isinstance(ex["images"], list) and len(ex["images"]) == 1
+            else ex["images"]
+            for ex in examples
+        ]
 
         batch = self.processor(
             text=texts,
