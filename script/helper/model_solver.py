@@ -308,7 +308,7 @@ class ModelSolver:
 
     def _model_solver(self):
         if SPECIAL_VL in self.MODEL_TYPES:
-            loaded = self._load_special_vision(self.source)
+            loaded = self._normalize_loaded_components(self._load_special_vision(self.source))
             self.model = loaded[0]
             self.tokenizer = loaded[1]
             if len(loaded) == 3:
@@ -319,7 +319,7 @@ class ModelSolver:
             return self.model, self.tokenizer
 
         if CUSTOM in self.MODEL_TYPES:
-            loaded = self._load_custom(self.source)
+            loaded = self._normalize_loaded_components(self._load_custom(self.source))
             self.model = loaded[0]
             self.tokenizer = loaded[1]
             if len(loaded) == 3:
@@ -330,18 +330,70 @@ class ModelSolver:
             return self.model, self.tokenizer
 
         if MULTI in self.MODEL_TYPES:
-            self.model, self.processor = self._load_multi(self.source)
+            loaded = self._normalize_loaded_components(self._load_multi(self.source))
+            self.model = loaded[0]
+            self.tokenizer = loaded[1]
+            if len(loaded) == 3:
+                self.processor = loaded[2]
             self.model = self._apply_lora(self.model)
-            return self.model, self.processor
+            if self.processor is not None:
+                return self.model, self.tokenizer, self.processor
+            return self.model, self.tokenizer
 
         if CAUSALLM in self.MODEL_TYPES:
-            self.model, self.tokenizer = self._load_causal(self.source)
+            loaded = self._normalize_loaded_components(self._load_causal(self.source))
+            self.model = loaded[0]
+            self.tokenizer = loaded[1]
             self.model = self._apply_lora(self.model)
             return self.model, self.tokenizer
 
-        self.model, self.tokenizer = self._load_auto(self.source)
+        loaded = self._normalize_loaded_components(self._load_auto(self.source))
+        self.model = loaded[0]
+        self.tokenizer = loaded[1]
         self.model = self._apply_lora(self.model)
         return self.model, self.tokenizer
+
+    def _normalize_loaded_components(self, loaded):
+        model = loaded[0]
+        tokenizer = loaded[1] if len(loaded) > 1 else None
+        processor = loaded[2] if len(loaded) > 2 else None
+
+        if processor is None and hasattr(tokenizer, "image_processor"):
+            processor = tokenizer
+            tokenizer = getattr(processor, "tokenizer", None)
+
+        if tokenizer is None and processor is not None:
+            tokenizer = getattr(processor, "tokenizer", None)
+
+        self._normalize_eos_token(tokenizer)
+        processor_tokenizer = getattr(processor, "tokenizer", None)
+        self._normalize_eos_token(processor_tokenizer)
+
+        if processor is not None and tokenizer is not None and hasattr(processor, "tokenizer"):
+            processor.tokenizer = tokenizer
+
+        if processor is not None:
+            return model, tokenizer, processor
+        return model, tokenizer
+
+    @staticmethod
+    def _normalize_eos_token(tokenizer):
+        if tokenizer is None:
+            return
+
+        vocab = tokenizer.get_vocab() if hasattr(tokenizer, "get_vocab") else {}
+        current_eos = getattr(tokenizer, "eos_token", None)
+
+        if current_eos and current_eos != "<EOS_TOKEN>":
+            return
+        if "<|im_end|>" not in vocab:
+            return
+
+        tokenizer.eos_token = "<|im_end|>"
+        if hasattr(tokenizer, "convert_tokens_to_ids"):
+            eos_token_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
+            if eos_token_id is not None:
+                tokenizer.eos_token_id = eos_token_id
 
     def _load_causal(self, source):
         # try to load causal model with unsloth or fall back to hf
