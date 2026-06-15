@@ -19,6 +19,7 @@ class HFTrainer:
 
         self.processor = processor
         self.tokenizer = tokenizer
+        self.epochs = 5
         self.model = model
         self.model_name = model_name
         self.dataset_name = dataset_name
@@ -44,13 +45,14 @@ class HFTrainer:
             "learning_rate":2e-5,
             "max_length":2048,
             "dataset_text_field":"text",
-            "save_steps": 10,
-            "save_strategy": "steps",
+            "save_strategy": "epoch",
             "save_total_limit": 2,
             "logging_steps": 1,
-            "max_steps": 10,
-            "eval_strategy": "steps",
-            "eval_steps": 50,
+            "num_train_epochs": self.epochs,
+            "eval_strategy": "epoch",
+            "load_best_model_at_end": True,
+            "metric_for_best_model": "eval_loss",
+            "greater_is_better": False,
             "remove_unused_columns":False, # no drop and should not drop unless you want to drop the columns
             "disable_tqdm": False,
             "report_to": self.wandb.trainer_report_to(),
@@ -64,13 +66,14 @@ class HFTrainer:
             "learning_rate": 1e-6,
             "max_prompt_length": 1024,
             "max_completion_length": 512,
-            "save_steps": 10,
-            "save_strategy": "steps",
+            "save_strategy": "epoch",
             "save_total_limit": 2,
             "logging_steps": 1,
-            "max_steps": 1,
-            "eval_strategy": "steps",
-            "eval_steps": 50,
+            "num_train_epochs": self.epochs,
+            "eval_strategy": "epoch",
+            "load_best_model_at_end": True,
+            "metric_for_best_model": "eval_loss",
+            "greater_is_better": False,
             "remove_unused_columns": False, # no drop and should not drop unless you want to drop the columns
             "disable_tqdm": False,
             "report_to": self.wandb.trainer_report_to(),
@@ -120,8 +123,27 @@ class HFTrainer:
                     trainer.train()
                 case _:
                     raise ValueError("Invalid trainer selected.")
+            self._save_and_log_best_model(trainer)
         finally:
             self.wandb.finish()
+
+    def _save_and_log_best_model(self, trainer):
+        best_checkpoint = trainer.state.best_model_checkpoint
+        best_metric = trainer.state.best_metric
+        if best_checkpoint is None:
+            print("No best checkpoint found; skipping best model save.")
+            return
+
+        self.model_save_path.mkdir(parents=True, exist_ok=True)
+        trainer.save_model(self.model_save_path.as_posix())
+        if self.processor is not None:
+            self.processor.save_pretrained(self.model_save_path.as_posix())
+        elif self.tokenizer is not None:
+            self.tokenizer.save_pretrained(self.model_save_path.as_posix())
+
+        self.wandb.log_best_checkpoint(best_checkpoint, best_metric)
+        print(f"Best checkpoint: {best_checkpoint}")
+        print(f"Best model saved to: {self.model_save_path}")
 
 # sft training and grpo training
 

@@ -61,6 +61,27 @@ class WandbLogger:
         if self.run is not None:
             self.run.finish()
 
+    def log_best_checkpoint(self, checkpoint_path, metric=None):
+        if self.run is None or checkpoint_path is None:
+            return
+
+        checkpoint_path = Path(checkpoint_path)
+        if not checkpoint_path.exists():
+            return
+
+        payload = {"best_checkpoint": checkpoint_path.as_posix()}
+        if metric is not None:
+            payload["best_metric"] = metric
+        wandb.log(payload)
+
+        artifact = wandb.Artifact(
+            name=f"{self.run_name}-best-checkpoint",
+            type="model",
+            metadata=payload,
+        )
+        artifact.add_dir(checkpoint_path.as_posix())
+        self.run.log_artifact(artifact)
+
     @staticmethod
     def trainer_report_to():
         return ["wandb"]
