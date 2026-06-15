@@ -60,7 +60,7 @@ class HFTrainer:
             "report_to": self.wandb.trainer_report_to(),
             "bf16": False,
             "fp16": False,
-            "eos_token": "<|im_end|>"
+            "eos_token": self.processor.tokenizer.eos_token,
             }
         self.grpo_config = grpo_config or {
             "output_dir": self.model_save_checkpoint_path.as_posix(),
