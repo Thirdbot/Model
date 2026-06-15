@@ -5,7 +5,8 @@ class Collator:
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.processor = processor
-        self.assistant_marker_ids = self.tokenizer(
+        self.text_tokenizer = getattr(processor, "tokenizer", None) or tokenizer
+        self.assistant_marker_ids = self.text_tokenizer(
             self.ASSISTANT_MARKER,
             add_special_tokens=False,
         )["input_ids"]
@@ -14,10 +15,10 @@ class Collator:
         print("using text collate")
         texts = [ex["text"] for ex in examples]
 
-        batch = self.tokenizer(texts,
-                               padding=True,
-                               truncation=True,
-                               return_tensors="pt")
+        batch = self.text_tokenizer(texts,
+                                    padding=True,
+                                    truncation=True,
+                                    return_tensors="pt")
         batch["labels"] = self._assistant_only_labels(batch)
         return batch
 
