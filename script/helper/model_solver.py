@@ -29,7 +29,7 @@ SPECIAL_VL_MODELS = model_config_naming.SPECIAL_VL_MODELS
 
 ROOT_PATH = Path(path_config['root']).resolve()
 CHECKPOINT_SAVE_PATH = ROOT_PATH / path_config['subdirs']['train_checkpoints']
-SAVE_PATH = ROOT_PATH /  path_config['dir']['train']
+SAVE_PATH = ROOT_PATH /  path_config['dirs']['train']
 
 
 class ModelSolver:
