@@ -1,3 +1,6 @@
+import torch
+
+
 class Collator:
     ASSISTANT_MARKER = "<|im_start|>assistant\n"
 
@@ -82,9 +85,12 @@ class Collator:
 
                 masks.append(mask)
 
-            if any(m is not None for m in masks):
-                batch["masks"] = masks
-
+            if isinstance(masks, list):
+                gt_mask = [
+                    torch.as_tensor(m) if not torch.is_tensor(m) else m
+                    for m in masks
+                ]
+                batch["masks"] = torch.stack(gt_mask, dim=0)
             return batch
 
     def _assistant_only_labels(self, batch):
