@@ -405,6 +405,8 @@ def main():
         key_owner=key_owner,
         set_add_generation_prompt=True,
         temp_for="sft",
+        additional_images=["mask_images"],
+        additional_tokens=["<SEG>"]
     )
 
     train_data, eval_data, test_data = template.solve()
