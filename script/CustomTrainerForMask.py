@@ -154,6 +154,7 @@ if __name__ == "__main__":
     model = token_helper.get_model()
     tokenizer = token_helper.get_tokenizer()
     seg_token_id = token_helper.seg_token_id
+    seg_token = token_helper.SEG_TOKEN
 
     dataset_solver, dataset = solve_dataset("thirdExec/synthetic-seismic-vlm")
     dataset = dataset["train"]
@@ -177,7 +178,8 @@ if __name__ == "__main__":
         key_map=key_map,
         key_owner=key_owner,
         temp_for="sft",
-        additional_images=["mask_images"]
+        additional_images=["mask_images"],
+        additional_tokens=[seg_token]
     )
 
     train_dataset, eval_dataset, test_dataset = template.solve()

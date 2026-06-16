@@ -9,7 +9,7 @@ from numpy.distutils.fcompiler import none
 from configs import load_config
 
 class Template:
-    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft',additional_images=None):
+    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft',additional_images=None,additional_tokens=None):
         self.tokenizer = tokenizer
         self.model_name = model_name
         self.dataset = dataset
@@ -17,6 +17,7 @@ class Template:
         self.test_size = 0.2
         self.temp_for = temp_for
         self.additional_images = additional_images or None
+        self.additional_tokens = additional_tokens or None
 
         self.set_add_generation_prompt = False or set_add_generation_prompt
         self.set_tokenize = False
@@ -131,8 +132,10 @@ class Template:
                 for value in packed_data.values()
                 if value is not None and value["content"]
             ]
-
-            extend_data = {"messages":messages,"images":images,'masks':masks}
+            if masks:
+                extend_data = {"messages":messages,"images":images,"masks":masks}
+                return extend_data
+            extend_data = {"messages":messages,"images":images}
             return extend_data
         elif self.temp_for == 'grpo':
             prompt = []
@@ -163,7 +166,7 @@ class Template:
         text = getattr(self,'text')
         image = getattr(self,'image')
 
-        text_content_resolve = {f"{text_col}": {"type":"text","text":f"{example[text_col]}\n"} for text_col in text if self._valid_key(text_col,example)}
+        text_content_resolve = {f"{text_col}": {"type":"text","text":f"{example[text_col]}{'' if not self.additional_tokens else self.additional_tokens[0]}\n"} for text_col in text if self._valid_key(text_col,example)}
         image_content_resolve = {f"{image_col}": [{"type":"image"} for _ in range(0,len(example[image_col]) if isinstance(example[image_col],list) else 1)] for image_col in image if example[image_col] is not None}
 
         extends_content = text_content_resolve | image_content_resolve
