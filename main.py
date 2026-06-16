@@ -95,7 +95,7 @@ if __name__ == "__main__":
     ##GRPO
     key_map = {
             "image": ["image"],
-            "text": ["problem","solution"], # state of data that will be loaded
+            "text": ["problem"], # state of data that will be loaded
         }
 
     key_owner = {
