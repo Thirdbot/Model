@@ -37,7 +37,7 @@ class ModelSolver:
         self.repo_id_or_model_path = str(repo_id_or_model_path)
         self.source = self.repo_id_or_model_path
         self._resolve_local_path()
-
+        self.use_lora = False
         self.config = self._get_config()
         self.model_type = None
         self.architectures = []
