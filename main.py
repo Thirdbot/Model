@@ -81,7 +81,7 @@ if __name__ == "__main__":
                         processor=processor,
                         collator=vision_collator,
                         selected_trainer='sft',
-                        peft_config=model_solver.peft_config() # pass when model needs lora; except unsloth
+                        peft_config=model_solver.peft_config # pass when model needs lora; except unsloth
                         )
     trainer.train_hf_model()
 
