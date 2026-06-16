@@ -113,6 +113,7 @@ class HFTrainer:
                         train_dataset=self.train_data,
                         eval_dataset=self.eval_data,
                         processing_class=self.processor or self.tokenizer,
+                        peft_config=self.peft_config,
                         reward_funcs=combined_reward,
                         args=self.grpo,
                     )
