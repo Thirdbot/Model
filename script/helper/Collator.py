@@ -1,3 +1,4 @@
+import numpy
 import torch
 
 
@@ -47,6 +48,7 @@ class Collator:
         return batch
 
     def tasks_collate(self, examples):
+        from PIL import Image
             texts = [ex["text"] for ex in examples]
 
             images = []
@@ -82,6 +84,17 @@ class Collator:
 
                 if isinstance(mask, list):
                     mask = mask[0]
+                if torch.is_tensor(mask):
+                    mask = mask
+
+                elif isinstance(mask, Image.Image):
+                    # PIL PNG mask -> grayscale numpy array -> tensor
+                    arr = numpy.array(mask.convert("L"))
+                    mask = torch.from_numpy(arr)
+                else:
+                    # numpy array or other array-like object
+                    arr = numpy.asarray(mask)
+                    mask = torch.from_numpy(arr)
 
                 masks.append(mask)
 
