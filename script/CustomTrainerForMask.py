@@ -174,7 +174,7 @@ if __name__ == "__main__":
     }
 
     template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
-                        dataset_name="thirdExec/synthetic-seismic-vlm", key_map=key_map, key_owner=key_owner)
+                        dataset_name="thirdExec/synthetic-seismic-vlm", key_map=key_map, key_owner=key_owner,is_output_mask=True,temp_for='sft')
     train_dataset, eval_dataset, test_dataset = template.solve()
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
