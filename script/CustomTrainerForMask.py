@@ -73,8 +73,16 @@ def train_mask_decoder_loop(
     optimizer.zero_grad(set_to_none=True)
 
     for step, batch in enumerate(dataloader):
-        gt_mask = batch.pop("masks").to(device).float()  # [B, 1, H, W]
+        gt_mask = batch.pop("masks")
 
+        if isinstance(gt_mask, list):
+            gt_mask = [
+                torch.as_tensor(m) if not torch.is_tensor(m) else m
+                for m in gt_mask
+            ]
+            gt_mask = torch.stack(gt_mask, dim=0)
+
+        gt_mask = gt_mask.to(device).float()
         batch = {
             k: v.to(device) if torch.is_tensor(v) else v
             for k, v in batch.items()
