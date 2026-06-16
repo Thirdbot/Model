@@ -292,20 +292,40 @@ def generate_one_with_mask(
 def load_saved_mask_model(model_solver_loaded):
     """
     Uses base model loaded by solve_model(), then attaches LoRA from outputs/mask_model.
+    Handles loaded_model being tuple/list with 2+ values.
     """
-    base_model, base_processor = model_solver_loaded
+
+    # solve_model may return: (model, processor), (model, tokenizer),
+    # (model, processor, tokenizer), etc.
+    if isinstance(model_solver_loaded, (tuple, list)):
+        base_model = model_solver_loaded[0]
+
+        if len(model_solver_loaded) >= 2:
+            base_processor = model_solver_loaded[1]
+        else:
+            base_processor = None
+    else:
+        base_model = model_solver_loaded
+        base_processor = None
 
     # Load tokenizer / processor from outputs/mask_model.
     if TOKENIZER_DIR.exists():
-        processor = type(base_processor).from_pretrained(str(TOKENIZER_DIR))
+        if base_processor is not None and hasattr(base_processor, "from_pretrained"):
+            processor = type(base_processor).from_pretrained(str(TOKENIZER_DIR))
+        else:
+            from transformers import AutoProcessor
+            processor = AutoProcessor.from_pretrained(str(TOKENIZER_DIR))
     else:
-        processor = type(base_processor).from_pretrained(str(MODEL_SAVE_DIR))
+        if base_processor is not None and hasattr(base_processor, "from_pretrained"):
+            processor = type(base_processor).from_pretrained(str(MODEL_SAVE_DIR))
+        else:
+            from transformers import AutoProcessor
+            processor = AutoProcessor.from_pretrained(str(MODEL_SAVE_DIR))
 
     # Load LoRA.
     if LORA_DIR.exists():
         model = PeftModel.from_pretrained(base_model, str(LORA_DIR))
     else:
-        # in case adapter_config.json is directly inside outputs/mask_model
         model = PeftModel.from_pretrained(base_model, str(MODEL_SAVE_DIR))
 
     model.eval()
@@ -335,7 +355,6 @@ def load_saved_mask_model(model_solver_loaded):
     mask_decoder.eval()
 
     return model, processor, mask_decoder, seg_token_id
-
 
 def main():
     manager()
