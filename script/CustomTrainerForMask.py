@@ -33,13 +33,9 @@ def get_seg_hidden(hidden, input_ids, seg_token_id):
 
 def train_mask_decoder_loop(
     model,
-    tokenizer,
-    token_id,
     dataloader,
-    mask_decoder,
     peft_config=None,
     lr=2e-5,
-    mask_weight=1.0,
     grad_accum_steps=1,
     device="cuda",
 ):
@@ -87,33 +83,17 @@ def train_mask_decoder_loop(
             return_dict=True,
         )
 
-        text_loss = outputs.loss
+        if isinstance(outputs, dict):
+            loss = outputs["loss"]
+            text_loss = outputs.get("text_loss", loss)
+            mask_loss = outputs.get("mask_loss", None)
+            mask_logits = outputs.get("mask_logits", None)
+        else:
+            loss = outputs.loss
+            text_loss = getattr(outputs, "text_loss", loss)
+            mask_loss = getattr(outputs, "mask_loss", None)
+            mask_logits = getattr(outputs, "mask_logits", None)
 
-        hidden = outputs.hidden_states[-1]
-        seg_hidden = get_seg_hidden(
-            hidden=hidden,
-            input_ids=batch["input_ids"],
-            seg_token_id=token_id,
-        )
-
-        # Your mask decoder decides this API.
-        # Minimal expected output: [B, 1, H, W]
-        mask_logits = mask_decoder(seg_hidden)
-
-        if mask_logits.shape[-2:] != gt_mask.shape[-2:]:
-            mask_logits = F.interpolate(
-                mask_logits,
-                size=gt_mask.shape[-2:],
-                mode="bilinear",
-                align_corners=False,
-            )
-
-        bce = F.binary_cross_entropy_with_logits(mask_logits, gt_mask)
-        dice = dice_loss_from_logits(mask_logits, gt_mask)
-        mask_loss = bce + dice
-
-        loss = text_loss + mask_weight * mask_loss
-        loss = loss / grad_accum_steps
         loss.backward()
 
         if (step + 1) % grad_accum_steps == 0:
@@ -212,10 +192,7 @@ if __name__ == "__main__":
 
     train_mask_decoder_loop(
         model=custom_model,
-        tokenizer=tokenizer,
-        token_id=seg_token_id,
         dataloader=dataloader,
-        mask_decoder=mask_decoder,
         peft_config=model_solver.peft_config,
         device="cuda",
     )
