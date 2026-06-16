@@ -66,6 +66,7 @@ class Collator:
                 images=images,
                 padding=True,
                 return_tensors="pt",
+
             )
 
             batch["labels"] = self._assistant_only_labels(batch)
