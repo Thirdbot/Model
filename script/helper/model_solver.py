@@ -33,10 +33,9 @@ class ModelSolver:
     Load model that is undergoing a transformation like Quantized after finished training for smoothly loading
     """
 
-    def __init__(self, repo_id_or_model_path, load_in_n_bit=4,use_lora=False, unsloth_mode=True):
+    def __init__(self, repo_id_or_model_path, load_in_n_bit=4, unsloth_mode=True):
         self.repo_id_or_model_path = str(repo_id_or_model_path)
         self.source = self.repo_id_or_model_path
-        self.use_lora = False # for model that already apply lora
         self._resolve_local_path()
 
         self.config = self._get_config()
@@ -83,7 +82,7 @@ class ModelSolver:
         self.r = 16
         self.lora_alpha = 32
         self.dropout = 0.05
-        self.use_lora = False
+
         self.peft_config = LoraConfig(
             r=self.r,
             lora_alpha=self.lora_alpha,
@@ -196,10 +195,10 @@ class ModelSolver:
         print(self.unsloth_error)
 
     def _apply_lora(self,model):
-        if not self.use_lora:
+        if not self.load_in_n_bit:
             self.lora_applied = False
             self.lora_backend = None
-            self.lora_reason = "Full finetuning requested; LoRA disabled."
+            self.lora_reason = "Full finetuning requested;"
             return model
 
         if self.load_with == "unsloth":
@@ -240,12 +239,13 @@ class ModelSolver:
         if self.load_with == "huggingface":
             # load peft with huggingface
             if self.load_in_n_bit:
-                model = prepare_model_for_kbit_training(model)
-            self.peft_config = self._build_peft_config()
+                model = prepare_model_for_kbit_training(model) # just quantize model and left sftTrainer handle pefft config
+            # self.peft_config = self._build_peft_config()
             self.lora_applied = True
             self.lora_backend = "huggingface"
             self.lora_reason = "Applied Hugging Face PEFT LoRA."
-            return get_peft_model(model,self.peft_config)
+            # return get_peft_model(model,self.peft_config)
+            return model
 
         self.lora_applied = False
         self.lora_backend = self.load_with
