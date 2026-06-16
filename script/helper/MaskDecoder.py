@@ -1,7 +1,8 @@
+import torch
 import torch.nn as nn
 
-class MaskDecoder:
-    def __init__(self, hidden_size, output_size=MASK_OUTPUT_SIZE):
+class MaskDecoder(nn.Module):
+    def __init__(self, hidden_size, output_size=256):
         super().__init__()
         self.output_size = output_size
         self.net = nn.Sequential(
@@ -11,8 +12,6 @@ class MaskDecoder:
             nn.Linear(hidden_size, output_size * output_size),
         )
 
-
     def forward(self, seg_hidden):
         logits = self.net(seg_hidden)
         return logits.view(seg_hidden.size(0), 1, self.output_size, self.output_size)
-

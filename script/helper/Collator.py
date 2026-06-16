@@ -43,9 +43,49 @@ class Collator:
         batch["labels"] = self._assistant_only_labels(batch)
         return batch
 
-    def tasks_collate(self):
-        print("using tasks collate")
-        pass
+    def tasks_collate(self, examples):
+            texts = [ex["text"] for ex in examples]
+
+            images = []
+            for ex in examples:
+                example_images = ex["images"]
+                if not isinstance(example_images, list):
+                    example_images = [example_images]
+                for image in example_images:
+                    if getattr(image, "mode", None) != "RGB":
+                        image = image.convert("RGB")
+                    images.append(image)
+
+            batch = self.processor(
+                text=texts,
+                images=images,
+                padding=True,
+                return_tensors="pt",
+            )
+
+            batch["labels"] = self._assistant_only_labels(batch)
+
+            # minimal mask support
+            masks = []
+            for ex in examples:
+                mask = (
+                        ex.get("target_mask")
+                        or ex.get("primary_mask")
+                        or ex.get("mask_image")
+                        or ex.get("mask_images")
+                        or ex.get("target_masks")
+                        or ex.get("masks")
+                )
+
+                if isinstance(mask, list):
+                    mask = mask[0]
+
+                masks.append(mask)
+
+            if any(m is not None for m in masks):
+                batch["masks"] = masks
+
+            return batch
 
     def _assistant_only_labels(self, batch):
         labels = batch["input_ids"].clone()

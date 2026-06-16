@@ -135,35 +135,33 @@ def train_mask_decoder_loop(
 
 
 if __name__ == "__main__":
-
+    from torch.utils.data import DataLoader
     from script.HuggingfaceDownload import solve_model, solve_dataset
     from script.DatatemplateEditor import Template
     from script.helper.Collator import Collator
     from script.helper.MaskDecoder import MaskDecoder
-    from script.CustomModel import AddModelToken
+    from script.CustomModel import AddModelToken, VLMWithMaskDecoder
 
-    model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
-                                             load_in_n_bit=4,
-                                             unsloth_mode=False)
+    model_solver, loaded_model = solve_model(
+        "geshang/Seg-R1-3B",
+        load_in_n_bit=4,
+        unsloth_mode=False,
+    )
+
     model, tokenizer = loaded_model[:2]
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
-    model, processor = model_solver.load_save_model(
-        at_dataset="thirdExec/synthetic-seismic-vlm",
-        method="sft",
-    )
+    # Add <SEG>
+    token_helper = AddModelToken(model, tokenizer=tokenizer, processor=processor)
+    model = token_helper.get_model()
+    tokenizer = token_helper.get_tokenizer()
+    seg_token_id = token_helper.seg_token_id
 
-    model_solver.status_report()
-    # dataset = read_csv(dataset_path)
-    dataset_solver, dataset = solve_dataset(
-        "thirdExec/synthetic-seismic-vlm"
-    )
-    model.print_trainable_parameters()
-    dataset = dataset['train']
+    dataset_solver, dataset = solve_dataset("thirdExec/synthetic-seismic-vlm")
+    dataset = dataset["train"]
 
-    # SFT
     key_map = {
-        "image": ["images","mask_images"],
+        "image": ["images", "mask_images"],
         "text": ["thinking", "problem", "solution"],
     }
 
@@ -173,13 +171,50 @@ if __name__ == "__main__":
         "assistant": ["thinking", "solution"],
     }
 
-    template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
-                        dataset_name="thirdExec/synthetic-seismic-vlm", key_map=key_map, key_owner=key_owner,is_output_mask=True,temp_for='sft')
+    template = Template(
+        dataset=dataset,
+        tokenizer=tokenizer,
+        model_name="geshang/Seg-R1-3B",
+        dataset_name="thirdExec/synthetic-seismic-vlm",
+        key_map=key_map,
+        key_owner=key_owner,
+        is_output_mask=True,
+        temp_for="sft",
+    )
+
     train_dataset, eval_dataset, test_dataset = template.solve()
-    print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
-    vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
+    collator = Collator(
+        dataset=dataset,
+        tokenizer=tokenizer,
+        processor=processor,
+    )
 
-    custom_model,custom_tokenizer = VLMWithMaskDecoder(vlm=model,mask_decoder=MaskDecoder,seg_token_id="<SEG>")
+    dataloader = DataLoader(
+        train_dataset,
+        batch_size=1,
+        shuffle=True,
+        collate_fn=collator.tasks_collate,
+    )
 
-    train_mask_decoder_loop(custom_model,custom_tokenizer,token_id="<SEG>")
+    hidden_size = model.config.hidden_size
+    mask_decoder = MaskDecoder(
+        hidden_size=hidden_size,
+        output_size=256,
+    ).cuda()
+
+    custom_model = VLMWithMaskDecoder(
+        vlm=model,
+        mask_decoder=mask_decoder,
+        seg_token_id=seg_token_id,
+    )
+
+    train_mask_decoder_loop(
+        model=custom_model,
+        tokenizer=tokenizer,
+        token_id=seg_token_id,
+        dataloader=dataloader,
+        mask_decoder=mask_decoder,
+        peft_config=model_solver.peft_config,
+        device="cuda",
+    )
