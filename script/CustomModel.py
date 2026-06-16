@@ -88,18 +88,18 @@ class VLMWithMaskDecoder(torch.nn.Module):
         if mask_logits.ndim == 3:
             mask_logits = mask_logits.unsqueeze(1)
 
-        gt_mask = gt_mask.to(mask_logits.device).float()
+        target = target.to(mask_logits.device).float()
 
-        if gt_mask.ndim == 2:
-            gt_mask = gt_mask.unsqueeze(0).unsqueeze(0)
-        elif gt_mask.ndim == 3:
-            gt_mask = gt_mask.unsqueeze(1)
+        if target.ndim == 2:
+            target = target.unsqueeze(0).unsqueeze(0)
+        elif target.ndim == 3:
+            target = target.unsqueeze(1)
 
-        if gt_mask.max() > 1:
-            gt_mask = (gt_mask > 0).float()
+        if target.max() > 1:
+            target = (target > 0).float()
 
         # batch mismatch check
-        if mask_logits.shape[0] != gt_mask.shape[0]:
+        if mask_logits.shape[0] != target.shape[0]:
             raise ValueError(
                 f"Pred/target batch mismatch: "
                 f"mask_logits={mask_logits.shape}, gt_mask={gt_mask.shape}. "
