@@ -101,7 +101,6 @@ if __name__ == "__main__":
     key_owner = {
         "system": ["system_prompt"],
         "user": ["problem", "image"],
-        "assistant": [],
     }
 
     template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
