@@ -33,10 +33,10 @@ class ModelSolver:
     Load model that is undergoing a transformation like Quantized after finished training for smoothly loading
     """
 
-    def __init__(self, repo_id_or_model_path, load_in_n_bit=4, unsloth_mode=True):
+    def __init__(self, repo_id_or_model_path, load_in_n_bit=4,use_lora=False, unsloth_mode=True):
         self.repo_id_or_model_path = str(repo_id_or_model_path)
         self.source = self.repo_id_or_model_path
-
+        self.use_lora = False # for model that already apply lora
         self._resolve_local_path()
 
         self.config = self._get_config()
@@ -66,7 +66,6 @@ class ModelSolver:
             load_in_8bit=self.load_8_bit,
         )
         # Non-Quantized
-        self.full_finetuning = True if self.load_in_n_bit is None else False
 
         # status
         self.load_with = None # unsloth or HF
@@ -84,13 +83,14 @@ class ModelSolver:
         self.r = 16
         self.lora_alpha = 32
         self.dropout = 0.05
-        self.use_lora = False if self.full_finetuning else True
+        self.use_lora = False
         self.peft_config = LoraConfig(
             r=self.r,
             lora_alpha=self.lora_alpha,
             lora_dropout=self.dropout,
             bias="none",
-            target_modules=self._select_lora_target_modules(),
+            target_modules = ["q_proj", "v_proj"]
+
         )
 
     def status_report(self):
@@ -253,12 +253,15 @@ class ModelSolver:
         return model
 
     def _build_peft_config(self):
+        from peft import TaskType
         return LoraConfig(
             r=self.r,
             lora_alpha=self.lora_alpha,
             lora_dropout=self.dropout,
             bias="none",
             target_modules=self._select_lora_target_modules(),
+            task_type=TaskType.CAUSAL_LM
+
         )
 
     def _select_lora_target_modules(self):

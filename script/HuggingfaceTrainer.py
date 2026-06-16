@@ -11,11 +11,12 @@ from configs.configs import load_config
 
 
 class HFTrainer:
-    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,model_name,dataset_name,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None,wandb_logger=None):
+    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,peft_config,model_name,dataset_name,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None,wandb_logger=None):
 
         self.train_data = train_data
         self.test_data = test_data
         self.eval_data = eval_data
+        self.peft_config = peft_config
 
         self.processor = processor
         self.tokenizer = tokenizer
@@ -84,6 +85,9 @@ class HFTrainer:
             "bf16": False,
             "fp16": False,
         }
+        if self.peft_config is not None:
+            self.sft_config["peft_config"] = self.peft_config
+            
         self.sft = self._set_sft_config(self.sft_config)
         self.grpo = self._set_grpo_config(self.grpo_config)
 

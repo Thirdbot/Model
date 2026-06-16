@@ -80,7 +80,8 @@ if __name__ == "__main__":
                         tokenizer=tokenizer,
                         processor=processor,
                         collator=vision_collator,
-                        selected_trainer='sft')
+                        selected_trainer='sft',
+                        peft_config=model_solver.peft_config())
     trainer.train_hf_model()
 
 
