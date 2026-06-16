@@ -21,6 +21,8 @@ if __name__ == "__main__":
     model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
                                              load_in_n_bit=4,
                                              unsloth_mode=False )
+    model,tokenizer = loaded_model[:2]
+
     dataset_solver, dataset = solve_dataset(
         "thirdExec/synthetic-seismic-vlm",
     )
@@ -28,6 +30,10 @@ if __name__ == "__main__":
     print("model source:", model_solver.source)
     print("dataset:", dataset)
 
+    model, processor = model_solver.load_save_model(
+        at_dataset="thirdExec/synthetic-seismic-vlm",
+        method="sft",
+    )
 
     model_solver.status_report()
     dataset_solver.status_report()
@@ -35,7 +41,6 @@ if __name__ == "__main__":
     if dataset_solver.needs_conversion:
         raise RuntimeError(dataset_solver.conversion_reason)
 
-    model,tokenizer = loaded_model[:2]
     # model.print_trainable_parameters()
     model.gradient_checkpointing_disable()
     if hasattr(model, "base_model"):

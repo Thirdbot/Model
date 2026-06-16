@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from tokenizers import processors
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -10,11 +11,13 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig
 )
-from peft import LoraConfig,get_peft_model,prepare_model_for_kbit_training
+import re
+from peft import LoraConfig,get_peft_model,prepare_model_for_kbit_training,PeftModel
 
 from configs import load_config
 
 model_config_naming = load_config("models")
+path_config = load_config("paths")
 names = model_config_naming.names
 
 CUSTOM = names.CUSTOM
@@ -23,6 +26,10 @@ MULTI = names.MULTI
 SPECIAL_VL = names.SPECIAL_VL
 
 SPECIAL_VL_MODELS = model_config_naming.SPECIAL_VL_MODELS
+
+ROOT_PATH = Path(path_config['root']).resolve()
+CHECKPOINT_SAVE_PATH = ROOT_PATH / path_config['subdirs']['train_checkpoints']
+SAVE_PATH = ROOT_PATH /  path_config['dir']['train']
 
 
 class ModelSolver:
@@ -117,6 +124,57 @@ class ModelSolver:
     def solve(self):
         return self._model_solver()
 
+    def load_save_model(self, at_dataset, method="sft"):
+        save_dirs, check_dirs = self._find_model(
+            self.repo_id_or_model_path,
+            at_dataset,
+            method,
+        )
+
+        # prefer latest checkpoint, fallback to latest saved dir
+        candidates = check_dirs or save_dirs
+        if not candidates:
+            raise FileNotFoundError("No saved model/checkpoint found.")
+
+        adapter_path = self._latest_checkpoint(candidates[-1])
+
+        return self.load_trained_model(
+            base_model=self.repo_id_or_model_path,
+            adapter_path=adapter_path,
+        )
+
+    @staticmethod
+    def load_trained_model(base_model, adapter_path):
+        model = AutoModelForImageTextToText.from_pretrained(
+            base_model,
+            device_map="auto",
+            torch_dtype="auto",
+        )
+
+        model = PeftModel.from_pretrained(model, adapter_path)
+
+        processor = AutoProcessor.from_pretrained(base_model, use_fast=False)
+
+        return model, processor
+
+    @staticmethod
+    def _latest_checkpoint(out_dir):
+        out_dir = Path(out_dir)
+        ckpts = sorted(
+            out_dir.glob("checkpoint-*"),
+            key=lambda p: int(p.name.split("-")[-1]),
+        )
+        return ckpts[-1] if ckpts else out_dir
+
+    @staticmethod
+    def _find_model(name, at_dataset, method):
+        save_root = SAVE_PATH / method / name / at_dataset
+        check_root = CHECKPOINT_SAVE_PATH / method / name / at_dataset
+
+        save_dirs = sorted(save_root.iterdir()) if save_root.exists() else []
+        check_dirs = sorted(check_root.iterdir()) if check_root.exists() else []
+
+        return save_dirs, check_dirs
     def _get_model_types(self):
         collectible_types = []
         if not self.config:
@@ -241,9 +299,9 @@ class ModelSolver:
             if self.load_in_n_bit:
                 model = prepare_model_for_kbit_training(model) # just quantize model and left sftTrainer handle pefft config
             # self.peft_config = self._build_peft_config()
-            self.lora_applied = True
+            self.lora_applied = False
             self.lora_backend = "huggingface"
-            self.lora_reason = "Applied Hugging Face PEFT LoRA."
+            self.lora_reason = "LoRA deferred to SFTTrainer via peft_config."
             # return get_peft_model(model,self.peft_config)
             return model
 
