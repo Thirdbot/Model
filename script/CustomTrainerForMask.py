@@ -156,7 +156,6 @@ if __name__ == "__main__":
 
     dataset_solver, dataset = solve_dataset("thirdExec/synthetic-seismic-vlm")
     dataset = dataset["train"]
-    print("dataset:", dataset)
 
     key_map = {
         "image": ["images", "mask_images"],
@@ -181,6 +180,7 @@ if __name__ == "__main__":
     )
 
     train_dataset, eval_dataset, test_dataset = template.solve()
+    print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
     collator = Collator(
         dataset=dataset,
