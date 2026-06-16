@@ -48,7 +48,7 @@ class Collator:
         return batch
 
     def tasks_collate(self, examples):
-        from PIL import Image
+            from PIL import Image
             texts = [ex["text"] for ex in examples]
 
             images = []
