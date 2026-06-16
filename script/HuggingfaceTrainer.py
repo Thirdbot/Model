@@ -16,7 +16,7 @@ class HFTrainer:
         self.train_data = train_data
         self.test_data = test_data
         self.eval_data = eval_data
-        self.peft_config = peft_config
+        self.peft_config = peft_config or None
 
         self.processor = processor
         self.tokenizer = tokenizer
@@ -85,9 +85,7 @@ class HFTrainer:
             "bf16": False,
             "fp16": False,
         }
-        if self.peft_config is not None:
-            self.sft_config["peft_config"] = self.peft_config
-            
+
         self.sft = self._set_sft_config(self.sft_config)
         self.grpo = self._set_grpo_config(self.grpo_config)
 
@@ -127,6 +125,7 @@ class HFTrainer:
                         eval_dataset= self.eval_data,
                         processing_class= processing_class,
                         data_collator= self.collator,
+                        peft_config = self.peft_config,
                         args= self.sft,
                     )
                     trainer.train()
