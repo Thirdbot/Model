@@ -182,7 +182,6 @@ if __name__ == "__main__":
     hidden_size = model.config.hidden_size
     mask_decoder = MaskDecoder(
         hidden_size=hidden_size,
-        output_size=256,
     ).cuda()
 
     custom_model = VLMWithMaskDecoder(
