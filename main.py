@@ -30,9 +30,11 @@ if __name__ == "__main__":
     print("model source:", model_solver.source)
     print("dataset:", dataset)
 
+    processor = loaded_model[-1] if len(loaded_model) == 3 else None
+
     model, processor = model_solver.load_save_model(
         at_dataset="thirdExec/synthetic-seismic-vlm",
-        method="sft",
+        method="grpo",
     )
 
     model_solver.status_report()
@@ -51,24 +53,59 @@ if __name__ == "__main__":
     #     if p.requires_grad:
     #         print(name)
     model.train()
-    processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
     dataset = dataset['train']
 
+    # key_map = {
+    #     "image": ["images"],
+    #     "text": ["instruction", "problem","thinking","solution","answer"],
+    # }
+    #
+    # key_owner = {
+    #     "system": ["instruction"],
+    #     "user": ["problem", "images"],
+    #     "assistant": ["thinking","solution"],
+    # }
+    #
+    # template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B", dataset_name="thirdExec/synthetic-seismic-vlm",
+    #                     key_map=key_map, key_owner=key_owner,set_add_generation_prompt=False)
+    #
+    # train_dataset, eval_dataset, test_dataset = template.solve()
+    # print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
+    #
+    # vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
+    # # check if collator is working
+    # # batch = vision_collator([train_dataset[0]])
+    # # print((batch["labels"] != -100).sum())
+    # trainer = HFTrainer(model_name="geshang/Seg-R1-3B",
+    #                     dataset_name="thirdExec/synthetic-seismic-vlm",
+    #                     train_data=train_dataset,
+    #                     eval_data=eval_dataset,
+    #                     test_data=test_dataset,
+    #                     model=model,
+    #                     tokenizer=tokenizer,
+    #                     processor=processor,
+    #                     collator=vision_collator,
+    #                     selected_trainer='sft',
+    #                     peft_config=model_solver.peft_config # pass when model needs lora; except unsloth
+    #                     )
+    # trainer.train_hf_model()
+
+
+    ##GRPO
     key_map = {
-        "image": ["images"],
-        "text": ["instruction", "problem","thinking","solution","answer"],
-    }
+            "image": ["image"],
+            "text": ["problem","solution"], # state of data that will be loaded
+        }
 
     key_owner = {
-        "system": ["instruction"],
-        "user": ["problem", "images"],
-        "assistant": ["thinking","solution"],
+        "system": ["system_prompt"],
+        "user": ["problem", "image"],
+        "assistant": [],
     }
 
-    template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B", dataset_name="thirdExec/synthetic-seismic-vlm",
-                        key_map=key_map, key_owner=key_owner,set_add_generation_prompt=False)
-
+    template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
+                        dataset_name="geshang/FCoT", key_map=key_map, key_owner=key_owner,set_add_generation_prompt=True,temp_for='grpo') # for model to generate answer
     train_dataset, eval_dataset, test_dataset = template.solve()
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
@@ -85,11 +122,10 @@ if __name__ == "__main__":
                         tokenizer=tokenizer,
                         processor=processor,
                         collator=vision_collator,
-                        selected_trainer='sft',
+                        selected_trainer='grpo',
                         peft_config=model_solver.peft_config # pass when model needs lora; except unsloth
                         )
     trainer.train_hf_model()
-
 
 """
 replicate training from paper first for stable pipeline. then keep training,changing architecture,changing dataset https://arxiv.org/pdf/2506.22624
