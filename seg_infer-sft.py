@@ -286,43 +286,49 @@ def generate_one_with_mask(
 
     overlay = make_overlay(image_for_size, pred_mask)
 
-    return prediction, pred_mask, overlay
 
+    return prediction, pred_mask, overlay
+def find_processor_from_loaded_model(loaded_model):
+    """
+    Find processor inside solve_model(...) returned object.
+    loaded_model may be tuple/list with model, processor, tokenizer, etc.
+    """
+    if not isinstance(loaded_model, (tuple, list)):
+        return None
+
+    for obj in loaded_model:
+        # Qwen processor usually has both tokenizer and image_processor
+        if hasattr(obj, "tokenizer") and (
+            hasattr(obj, "image_processor") or hasattr(obj, "image_processor_class")
+        ):
+            return obj
+
+    # fallback: any object with tokenizer
+    for obj in loaded_model:
+        if hasattr(obj, "tokenizer"):
+            return obj
+
+    return None
 
 def load_saved_mask_model(model_solver_loaded):
-    """
-    Uses base model loaded by solve_model(), then attaches LoRA from outputs/mask_model.
-    Handles loaded_model being tuple/list with 2+ values.
-    """
-
-    # solve_model may return: (model, processor), (model, tokenizer),
-    # (model, processor, tokenizer), etc.
     if isinstance(model_solver_loaded, (tuple, list)):
         base_model = model_solver_loaded[0]
-
-        if len(model_solver_loaded) >= 2:
-            base_processor = model_solver_loaded[1]
-        else:
-            base_processor = None
     else:
         base_model = model_solver_loaded
-        base_processor = None
 
-    # Load tokenizer / processor from outputs/mask_model.
-    if TOKENIZER_DIR.exists():
-        if base_processor is not None and hasattr(base_processor, "from_pretrained"):
-            processor = type(base_processor).from_pretrained(str(TOKENIZER_DIR))
-        else:
-            from transformers import AutoProcessor
-            processor = AutoProcessor.from_pretrained(str(TOKENIZER_DIR))
-    else:
-        if base_processor is not None and hasattr(base_processor, "from_pretrained"):
-            processor = type(base_processor).from_pretrained(str(MODEL_SAVE_DIR))
-        else:
-            from transformers import AutoProcessor
-            processor = AutoProcessor.from_pretrained(str(MODEL_SAVE_DIR))
+    base_processor = find_processor_from_loaded_model(model_solver_loaded)
 
-    # Load LoRA.
+    if base_processor is None:
+        raise ValueError(
+            "Could not find processor from solve_model output. "
+            "Print loaded_model types to inspect it."
+        )
+
+    processor_path = TOKENIZER_DIR if TOKENIZER_DIR.exists() else MODEL_SAVE_DIR
+
+    # Important: use SAME class as base processor, not AutoProcessor
+    processor = type(base_processor).from_pretrained(str(processor_path))
+
     if LORA_DIR.exists():
         model = PeftModel.from_pretrained(base_model, str(LORA_DIR))
     else:
@@ -336,13 +342,11 @@ def load_saved_mask_model(model_solver_loaded):
 
     if seg_token_id is None or seg_token_id == tokenizer.unk_token_id:
         raise ValueError(
-            f"{SEG_TOKEN} not found in tokenizer. "
-            f"Check tokenizer saved at {TOKENIZER_DIR} or {MODEL_SAVE_DIR}."
+            f"{SEG_TOKEN} not found in saved processor/tokenizer at {processor_path}."
         )
 
     hidden_size = get_hidden_size(model)
 
-    # IMPORTANT: must match your training-time constructor.
     mask_decoder = MaskDecoder(hidden_size=hidden_size)
 
     ckpt = torch.load(MASK_DECODER_PATH, map_location="cpu")
@@ -355,7 +359,6 @@ def load_saved_mask_model(model_solver_loaded):
     mask_decoder.eval()
 
     return model, processor, mask_decoder, seg_token_id
-
 def main():
     manager()
 
