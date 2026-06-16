@@ -176,7 +176,6 @@ if __name__ == "__main__":
         dataset_name="thirdExec/synthetic-seismic-vlm",
         key_map=key_map,
         key_owner=key_owner,
-        is_output_mask=True,
         temp_for="sft",
         additional_images=["mask_images"]
     )
