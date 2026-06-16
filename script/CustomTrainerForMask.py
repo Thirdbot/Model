@@ -34,6 +34,7 @@ def get_seg_hidden(hidden, input_ids, seg_token_id):
 def train_mask_decoder_loop(
     model,
     dataloader,
+    epochs=10,
     peft_config=None,
     lr=2e-5,
     grad_accum_steps=1,
@@ -67,46 +68,52 @@ def train_mask_decoder_loop(
     optimizer = torch.optim.AdamW(params, lr=lr)
 
     optimizer.zero_grad(set_to_none=True)
+    ...
+    global_step = 0
 
-    for step, batch in enumerate(dataloader):
-        gt_mask = batch.pop("masks")
+    for epoch in range(epochs):
+        print(f"Epoch {epoch + 1}/{epochs}")
 
-        gt_mask = gt_mask.to(device).float()
-        batch = {
-            k: v.to(device) if torch.is_tensor(v) else v
-            for k, v in batch.items()
-        }
+        for step, batch in enumerate(dataloader):
+            gt_mask = batch.pop("masks")
 
-        outputs = model(
-            gt_mask,
-            **batch,
-            output_hidden_states=True,
-            return_dict=True,
-        )
+            gt_mask = gt_mask.to(device).float()
+            batch = {
+                k: v.to(device) if torch.is_tensor(v) else v
+                for k, v in batch.items()
+            }
 
-        if isinstance(outputs, dict):
-            loss = outputs["loss"]
-            text_loss = outputs.get("text_loss", loss)
-            mask_loss = outputs.get("mask_loss", None)
-        else:
-            loss = outputs.loss
-            text_loss = getattr(outputs, "text_loss", loss)
-            mask_loss = getattr(outputs, "mask_loss", None)
-
-        loss.backward()
-
-        if (step + 1) % grad_accum_steps == 0:
-            torch.nn.utils.clip_grad_norm_(params, 1.0)
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-
-        if step % 10 == 0:
-            print(
-                f"step={step} "
-                f"loss={loss.item() * grad_accum_steps:.4f} "
-                f"text={text_loss.item():.4f} "
-                f"mask={mask_loss.item():.4f}"
+            outputs = model(
+                gt_mask,
+                **batch,
+                output_hidden_states=True,
+                return_dict=True,
             )
+
+            if isinstance(outputs, dict):
+                loss = outputs["loss"]
+                text_loss = outputs.get("text_loss", loss)
+                mask_loss = outputs.get("mask_loss", None)
+            else:
+                loss = outputs.loss
+                text_loss = getattr(outputs, "text_loss", loss)
+                mask_loss = getattr(outputs, "mask_loss", None)
+
+            loss.backward()
+
+            if global_step % grad_accum_steps == 0:
+                torch.nn.utils.clip_grad_norm_(params, 1.0)
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+
+            if global_step % 10 == 0:
+                print(
+                    f"step={step} "
+                    f"loss={loss.item() * grad_accum_steps:.4f} "
+                    f"text loss={text_loss.item():.4f} "
+                    f"mask loss={mask_loss.item():.4f}"
+                )
+            global_step += 1
 
     return model, mask_decoder
 
@@ -225,6 +232,7 @@ if __name__ == "__main__":
     model,mask_decoder = train_mask_decoder_loop(
         model=custom_model,
         dataloader=dataloader,
+        epochs=10,
         peft_config=model_solver.peft_config,
         device="cuda",
     )
