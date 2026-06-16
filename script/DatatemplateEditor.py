@@ -45,10 +45,11 @@ class Template:
         eval_dataset = second["train"]
         test_dataset = second["test"]
 
+        dataset_columns = self.dataset.column_names.remove("mask_images")  if self.is_output_mask else self.dataset.column_names # exclude mask_images from getting removed
+        train_dataset  = train_dataset.map(self._message_to_template, remove_columns=dataset_columns)
+        eval_dataset = eval_dataset.map(self._message_to_template, remove_columns=dataset_columns)
+        test_dataset = test_dataset.map(self._message_to_template, remove_columns=dataset_columns)
 
-        train_dataset  = train_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
-        eval_dataset = eval_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
-        test_dataset = test_dataset.map(self._message_to_template, remove_columns=self.dataset.column_names)
         if self.temp_for == 'grpo':
             return train_dataset,eval_dataset,test_dataset
 

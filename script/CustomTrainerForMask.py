@@ -150,15 +150,13 @@ if __name__ == "__main__":
 
     model, processor = model_solver.load_save_model(
         at_dataset="thirdExec/synthetic-seismic-vlm",
-        method="grpo",
+        method="sft",
     )
 
     model_solver.status_report()
-    dataset_path = "/home/third/Desktop/simulationv2/Dataset/multimodal_multi_image_dataset.csv"
     # dataset = read_csv(dataset_path)
     dataset_solver, dataset = solve_dataset(
-        # "SakanaAI/JA-Multi-Image-VQA" #,
-        "geshang/FCoT"
+        "thirdExec/synthetic-seismic-vlm"
     )
     model.print_trainable_parameters()
     dataset = dataset['train']
@@ -171,12 +169,12 @@ if __name__ == "__main__":
 
     key_owner = {
         "system": ["system_prompt"],
-        "user": ["problem", "image"],
+        "user": ["problem", "images"],
         "assistant": ["thinking", "solution"],
     }
 
     template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
-                        dataset_name="geshang/FCoT", key_map=key_map, key_owner=key_owner)
+                        dataset_name="thirdExec/synthetic-seismic-vlm", key_map=key_map, key_owner=key_owner)
     train_dataset, eval_dataset, test_dataset = template.solve()
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
@@ -184,4 +182,4 @@ if __name__ == "__main__":
 
     custom_model,custom_tokenizer = VLMWithMaskDecoder(vlm=model,mask_decoder=MaskDecoder,seg_token_id="<SEG>")
 
-    train_mask_decoder_loop(custom_model,custom_tokenizer)
+    train_mask_decoder_loop(custom_model,custom_tokenizer,token_id="<SEG>")

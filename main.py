@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     model, processor = model_solver.load_save_model(
         at_dataset="thirdExec/synthetic-seismic-vlm",
-        method="grpo",
+        method="sft",
     )
 
     model_solver.status_report()
