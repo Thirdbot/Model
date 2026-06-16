@@ -34,8 +34,17 @@ class VLMWithMaskDecoder(torch.nn.Module):
         self.generation_config = getattr(vlm, "generation_config", None)
 
     def forward(self, mask=None, **batch):
+        # remove custom / unwanted keys
+        batch.pop("masks", None)
+        batch.pop("mask", None)
+        batch.pop("num_items_in_batch", None)
+
+        # remove duplicate keys that you set manually
+        batch.pop("output_hidden_states", None)
+        batch.pop("return_dict", None)
+
         outputs = self.vlm(
-            **{k: v for k, v in batch.items() if k != "mask"},
+            **{k: v for k, v in batch.items() if k != "masks"},
             output_hidden_states=True,
             return_dict=True,
         )
