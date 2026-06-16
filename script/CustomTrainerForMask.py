@@ -156,6 +156,7 @@ if __name__ == "__main__":
 
     dataset_solver, dataset = solve_dataset("thirdExec/synthetic-seismic-vlm")
     dataset = dataset["train"]
+    print("dataset:", dataset)
 
     key_map = {
         "image": ["images", "mask_images"],
