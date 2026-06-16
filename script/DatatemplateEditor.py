@@ -9,13 +9,14 @@ from numpy.distutils.fcompiler import none
 from configs import load_config
 
 class Template:
-    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft'):
+    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft',is_output_mask=False):
         self.tokenizer = tokenizer
         self.model_name = model_name
         self.dataset = dataset
         self.dataset_name = dataset_name
         self.test_size = 0.2
         self.temp_for = temp_for
+        self.is_output_mask = is_output_mask
 
         self.set_add_generation_prompt = False or set_add_generation_prompt
         self.set_tokenize = False
@@ -114,6 +115,7 @@ class Template:
             else:
                 images.append(value)
 
+
         if self.temp_for == 'sft':
             messages = [
                 value
@@ -121,7 +123,7 @@ class Template:
                 if value is not None and value["content"]
             ]
 
-            extend_data = {"messages":messages,"images":images}
+            extend_data = {"messages":messages,"images":images,'masks':example['mask_images'] if 'mask_images' in example.keys() else None}
             return extend_data
         elif self.temp_for == 'grpo':
             prompt = []
