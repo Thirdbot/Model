@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 from peft import get_peft_model, prepare_model_for_kbit_training
-from CustomModel import VLMWithMaskDecoder
 
 def dice_loss_from_logits(logits, target, eps=1.0):
     pred = torch.sigmoid(logits)
@@ -44,8 +43,6 @@ def train_mask_decoder_loop(
     grad_accum_steps=1,
     device="cuda",
 ):
-    # add token to model
-    model,tokenizer = AddModelToken(model,tokenizer)
     # 2. if quantized custom loop, attach LoRA manually
     if peft_config is not None:
         model = prepare_model_for_kbit_training(model)
