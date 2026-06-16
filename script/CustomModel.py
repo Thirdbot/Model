@@ -30,6 +30,8 @@ class VLMWithMaskDecoder(torch.nn.Module):
         self.vlm = vlm
         self.mask_decoder = mask_decoder
         self.seg_token_id = seg_token_id
+        self.config = vlm.config
+        self.generation_config = getattr(vlm, "generation_config", None)
 
     def forward(self, mask=None, **batch):
         outputs = self.vlm(
