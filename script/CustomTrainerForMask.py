@@ -159,7 +159,7 @@ if __name__ == "__main__":
     dataset = dataset["train"]
 
     key_map = {
-        "image": ["images", "mask_images"],
+        "image": ["images"],
         "text": ["thinking", "problem", "solution"],
     }
 
@@ -178,6 +178,7 @@ if __name__ == "__main__":
         key_owner=key_owner,
         is_output_mask=True,
         temp_for="sft",
+        additional_images=["mask_images"]
     )
 
     train_dataset, eval_dataset, test_dataset = template.solve()

@@ -9,14 +9,14 @@ from numpy.distutils.fcompiler import none
 from configs import load_config
 
 class Template:
-    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft',is_output_mask=False):
+    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft',additional_images=None):
         self.tokenizer = tokenizer
         self.model_name = model_name
         self.dataset = dataset
         self.dataset_name = dataset_name
         self.test_size = 0.2
         self.temp_for = temp_for
-        self.is_output_mask = is_output_mask
+        self.additional_images = additional_images or None
 
         self.set_add_generation_prompt = False or set_add_generation_prompt
         self.set_tokenize = False
@@ -45,7 +45,7 @@ class Template:
         eval_dataset = second["train"]
         test_dataset = second["test"]
 
-        dataset_columns = self.dataset.column_names.remove("mask_images")  if self.is_output_mask else self.dataset.column_names # exclude mask_images from getting removed
+        dataset_columns = filter(lambda x: x not in self.additional_images,self.dataset.column_names)  if self.additional_images else self.dataset.column_names # exclude mask_images from getting removed
         train_dataset  = train_dataset.map(self._message_to_template, remove_columns=dataset_columns)
         eval_dataset = eval_dataset.map(self._message_to_template, remove_columns=dataset_columns)
         test_dataset = test_dataset.map(self._message_to_template, remove_columns=dataset_columns)
@@ -107,8 +107,16 @@ class Template:
         packed_data['assistant_template']['content'] = self._collect(assistant_owner,resolve)
 
         images = []
+        masks = []
 
         for img_k in image_key:
+            if img_k in self.additional_images:
+                mask_value = example[img_k] # right now, handle for mask
+                if isinstance(mask_value, list):
+                    masks.extend(mask_value)
+                else:
+                    masks.append(mask_value)
+
             value = example[img_k]
 
             if isinstance(value, list):
@@ -124,7 +132,7 @@ class Template:
                 if value is not None and value["content"]
             ]
 
-            extend_data = {"messages":messages,"images":images,'masks':example['mask_images'] if 'mask_images' in example.keys() else None}
+            extend_data = {"messages":messages,"images":images,'masks':masks}
             return extend_data
         elif self.temp_for == 'grpo':
             prompt = []
@@ -138,7 +146,7 @@ class Template:
             extend_data = {"prompt":prompt,"images":images,"target":solution}
             return extend_data
         else:
-         return None
+            return None
 
     def _valid_key(self, key, example=None):
         if key is None:
