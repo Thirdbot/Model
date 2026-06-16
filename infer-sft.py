@@ -8,6 +8,43 @@ from script.FolderManager import manager
 from script.HuggingfaceDownload import solve_dataset, solve_model
 from script.DatatemplateEditor import Template
 
+from PIL import Image, ImageDraw, ImageFont
+import textwrap
+
+
+def save_preview(example, prediction, out_dir, idx):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    images = get_images(example)
+
+    if not images:
+        canvas = Image.new("RGB", (900, 400), "white")
+    else:
+        img = images[0].copy().convert("RGB")
+        img.thumbnail((700, 700))
+        canvas = Image.new("RGB", (900, img.height + 260), "white")
+        canvas.paste(img, (10, 10))
+
+    draw = ImageDraw.Draw(canvas)
+
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 18)
+    except Exception:
+        font = ImageFont.load_default()
+
+    y = canvas.height - 240
+    draw.text((10, y), f"Sample {idx}", fill="black", font=font)
+    y += 30
+
+    wrapped = textwrap.wrap(prediction, width=90)
+    for line in wrapped[:10]:
+        draw.text((10, y), line, fill="black", font=font)
+        y += 24
+
+    out_path = out_dir / f"sample_{idx:04d}.png"
+    canvas.save(out_path)
+    return out_path
 
 def to_device(batch, device):
     return {
@@ -132,12 +169,19 @@ def main():
                 max_new_tokens=512,
             )
 
+            preview_path = save_preview(
+                example=example,
+                prediction=pred,
+                out_dir="logs/inference_previews",
+                idx=i,
+            )
+
             row = {
                 "idx": i,
                 "prediction": pred,
+                "preview_path": str(preview_path),
             }
 
-            # keep prompt text for debugging
             if "text" in example:
                 row["prompt"] = example["text"]
 
@@ -145,9 +189,7 @@ def main():
 
             print(f"\n--- sample {i} ---")
             print(pred)
-
-    print(f"Saved predictions to {out_path}")
-
+            print("preview:", preview_path)
 
 if __name__ == "__main__":
     main()
