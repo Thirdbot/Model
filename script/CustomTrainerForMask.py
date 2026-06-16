@@ -1,5 +1,5 @@
 import torch
-import torch.nn.functional as F
+import os
 from peft import get_peft_model, prepare_model_for_kbit_training
 
 def dice_loss_from_logits(logits, target, eps=1.0):
@@ -88,12 +88,10 @@ def train_mask_decoder_loop(
             loss = outputs["loss"]
             text_loss = outputs.get("text_loss", loss)
             mask_loss = outputs.get("mask_loss", None)
-            mask_logits = outputs.get("mask_logits", None)
         else:
             loss = outputs.loss
             text_loss = getattr(outputs, "text_loss", loss)
             mask_loss = getattr(outputs, "mask_loss", None)
-            mask_logits = getattr(outputs, "mask_logits", None)
 
         loss.backward()
 
@@ -144,6 +142,7 @@ def save_vlm_and_mask_decoder(
         },
         os.path.join(output_dir, "mask_decoder.pt"),
     )
+    print(f"Mask decoder saved to {output_dir}")
 
 
 if __name__ == "__main__":
@@ -223,9 +222,11 @@ if __name__ == "__main__":
         seg_token_id=seg_token_id,
     )
 
-    train_mask_decoder_loop(
+    model,mask_decoder = train_mask_decoder_loop(
         model=custom_model,
         dataloader=dataloader,
         peft_config=model_solver.peft_config,
         device="cuda",
     )
+
+    save_vlm_and_mask_decoder(model, mask_decoder, tokenizer, processor)

@@ -106,6 +106,13 @@ class VLMWithMaskDecoder(torch.nn.Module):
                 f"Probably multiple <SEG> tokens or wrong mask batching."
             )
 
+        # CRITICAL FIX: resize target to decoder output size
+        if target.shape[-2:] != mask_logits.shape[-2:]:
+            target = F.interpolate(
+                target,
+                size=mask_logits.shape[-2:],
+                mode="nearest",
+            )
         bce = F.binary_cross_entropy_with_logits(mask_logits, target)
 
         pred = torch.sigmoid(mask_logits)
