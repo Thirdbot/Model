@@ -2,6 +2,22 @@ import torch
 import torch.nn.functional as F
 
 
+def get_seg_hidden(hidden, input_ids, seg_token_id):
+    import torch
+
+    seg_pos = input_ids.eq(seg_token_id)  # [B, L]
+    has_seg = seg_pos.any(dim=1)
+
+    if not has_seg.all():
+        bad_rows = (~has_seg).nonzero(as_tuple=True)[0].tolist()
+        raise ValueError(f"No <SEG> token found in rows: {bad_rows}")
+
+    # first <SEG> per sample
+    seg_idx = seg_pos.float().argmax(dim=1)
+    b_idx = torch.arange(input_ids.size(0), device=input_ids.device)
+
+    return hidden[b_idx, seg_idx]  # [B, D]
+
 class AddModelToken:
     def __init__(self,model,tokenizer=None,processor=None):
         self.model = model
@@ -57,7 +73,7 @@ class VLMWithMaskDecoder(torch.nn.Module):
         if seg_pos.sum().item() == 0:
             raise ValueError("No <SEG> token found in batch.")
 
-        seg_hidden = hidden[seg_pos]
+        seg_hidden = get_seg_hidden(hidden, batch["input_ids"], self.seg_token_id)
 
         mask_logits = self.mask_decoder(seg_hidden)
 
@@ -68,6 +84,27 @@ class VLMWithMaskDecoder(torch.nn.Module):
             }
 
         target = mask.float()
+
+        if mask_logits.ndim == 3:
+            mask_logits = mask_logits.unsqueeze(1)
+
+        gt_mask = gt_mask.to(mask_logits.device).float()
+
+        if gt_mask.ndim == 2:
+            gt_mask = gt_mask.unsqueeze(0).unsqueeze(0)
+        elif gt_mask.ndim == 3:
+            gt_mask = gt_mask.unsqueeze(1)
+
+        if gt_mask.max() > 1:
+            gt_mask = (gt_mask > 0).float()
+
+        # batch mismatch check
+        if mask_logits.shape[0] != gt_mask.shape[0]:
+            raise ValueError(
+                f"Pred/target batch mismatch: "
+                f"mask_logits={mask_logits.shape}, gt_mask={gt_mask.shape}. "
+                f"Probably multiple <SEG> tokens or wrong mask batching."
+            )
 
         bce = F.binary_cross_entropy_with_logits(mask_logits, target)
 
