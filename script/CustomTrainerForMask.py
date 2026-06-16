@@ -78,6 +78,7 @@ def train_mask_decoder_loop(
         }
 
         outputs = model(
+            gt_mask,
             **batch,
             output_hidden_states=True,
             return_dict=True,
