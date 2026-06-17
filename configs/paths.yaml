@@ -1,4 +1,4 @@
-root: .
+root:  ${oc.env:MODEL_ROOT,.}
 
 dirs:
     runs: runs

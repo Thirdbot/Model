@@ -16,7 +16,7 @@ class Template:
         self.dataset_name = dataset_name
         self.test_size = 0.2
         self.temp_for = temp_for
-        self.additional_images = additional_images or None
+        self.additional_images = additional_images or []
         self.additional_tokens = additional_tokens or None
 
         self.set_add_generation_prompt = False or set_add_generation_prompt

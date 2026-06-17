@@ -2,26 +2,23 @@
 Trainer for huggingface model, suit for training custom model.
 """
 from pathlib import Path
-
-from trl import GRPOTrainer, SFTTrainer, SFTConfig, GRPOConfig
 from script.reward import combined_reward
 from script.WandbLogger import WandbLogger
 
 from configs.configs import load_config
 
-
 class HFTrainer:
-    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,peft_config,model_name,dataset_name,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None,wandb_logger=None):
+    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,model_name,dataset_name,peft_config=None,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None,wandb_logger=None,epochs=1,batch_size=1):
 
         self.train_data = train_data
         self.test_data = test_data
         self.eval_data = eval_data
-        self.peft_config = peft_config or None
+        self.peft_config = peft_config
 
+        self.epochs = epochs
         self.processor = processor
         self.tokenizer = tokenizer
-        self.epochs = 100
-        self.batch_size = 1
+        self.batch_size = batch_size
         self.model = model
         self.model_name = model_name
         self.dataset_name = dataset_name
@@ -61,7 +58,7 @@ class HFTrainer:
             "report_to": self.wandb.trainer_report_to(),
             "bf16": False,
             "fp16": False,
-            }
+        }
 
         self.grpo_config = grpo_config or {
             "output_dir": self.model_save_checkpoint_path.as_posix(),
@@ -93,12 +90,14 @@ class HFTrainer:
 
     @staticmethod
     def _set_sft_config(config):
+        from trl import SFTConfig
         return SFTConfig(
             **config
         )
 
     @staticmethod
     def _set_grpo_config(config):
+        from trl import GRPOConfig
         return GRPOConfig(
             **config
         )
@@ -108,6 +107,7 @@ class HFTrainer:
         try:
             match self.selected_trainer:
                 case 'grpo':
+                    from trl import GRPOTrainer
                     trainer = GRPOTrainer(
                         model=self.model,
                         train_dataset=self.train_data,
@@ -119,6 +119,7 @@ class HFTrainer:
                     )
                     trainer.train()
                 case 'sft':
+                    from trl import SFTTrainer, SFTConfig
                     processing_class = self.processor or self.tokenizer
                     trainer = SFTTrainer(
                         model= self.model,
