@@ -51,10 +51,10 @@ class Template:
         eval_dataset = eval_dataset.map(self._message_to_template, remove_columns=dataset_columns)
         test_dataset = test_dataset.map(self._message_to_template, remove_columns=dataset_columns)
 
-        if self.temp_for == 'grpo':
+        if 'grpo' in self.temp_for:
             return train_dataset,eval_dataset,test_dataset
 
-        elif self.temp_for == 'sft':
+        elif 'sft' in self.temp_for:
             train_dataset = train_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
             eval_dataset = eval_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
             test_dataset = test_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
@@ -111,6 +111,7 @@ class Template:
         masks = []
 
         for img_k in image_key:
+            # additional like mask
             if img_k in self.additional_images:
                 mask_value = example[img_k] # right now, handle for mask
                 if isinstance(mask_value, list):
@@ -126,18 +127,20 @@ class Template:
                 images.append(value)
 
 
-        if self.temp_for == 'sft':
+        if 'sft' in self.temp_for:
             messages = [
                 value
                 for value in packed_data.values()
                 if value is not None and value["content"]
             ]
+            # for mask in sft
             if masks:
                 extend_data = {"messages":messages,"images":images,"masks":masks}
                 return extend_data
             extend_data = {"messages":messages,"images":images}
             return extend_data
-        elif self.temp_for == 'grpo':
+
+        elif 'grpo' in self.temp_for:
             prompt = []
 
             if packed_data["system_template"]["content"]:

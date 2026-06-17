@@ -1,7 +1,6 @@
 root:  ${oc.env:MODEL_ROOT,.}
 
 dirs:
-    runs: runs
     logs: logs
     saves: save/models
     train: train
@@ -14,8 +13,7 @@ subdirs:
   test_outputs: ${dirs.test}/models
 
 create:
-    - ${dirs.runs}
-    - ${dirs.logs}
+    - ${dirs.custom}
     - ${dirs.saves}
     - ${dirs.train}
     - ${dirs.test}

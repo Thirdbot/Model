@@ -2,7 +2,7 @@
 Trainer for huggingface model, suit for training custom model.
 """
 from pathlib import Path
-from script.reward import combined_reward
+from script.custom.reward import combined_reward
 from script.WandbLogger import WandbLogger
 
 from configs.configs import load_config
@@ -23,8 +23,8 @@ class HFTrainer:
         self.model_name = model_name
         self.dataset_name = dataset_name
         self.root_path = Path(load_config("paths")['root'])
-        self.model_save_path = self.root_path / load_config("paths")['dirs']['saves'] / self.model_name / self.dataset_name
-        self.model_save_checkpoint_path = self.root_path / load_config("paths")['subdirs']['train_checkpoints'] / selected_trainer / self.model_name / self.dataset_name
+        self.model_save_path = self.root_path / load_config("paths")['dirs']['saves'] / selected_trainer / self.model_name / self.dataset_name # grpo / sft / custom_*
+        self.model_save_checkpoint_path = self.root_path / load_config("paths")['subdirs']['train_checkpoints'] / selected_trainer / self.model_name / self.dataset_name # grpo / sft / custom_*
         self.selected_trainer = selected_trainer
         self.wandb = wandb_logger or WandbLogger(
             project="model",
@@ -108,11 +108,12 @@ class HFTrainer:
             match self.selected_trainer:
                 case 'grpo':
                     from trl import GRPOTrainer
+                    processing_class = self.processor or self.tokenizer
                     trainer = GRPOTrainer(
                         model=self.model,
                         train_dataset=self.train_data,
                         eval_dataset=self.eval_data,
-                        processing_class=self.processor or self.tokenizer,
+                        processing_class=processing_class,
                         peft_config=self.peft_config,
                         reward_funcs=combined_reward,
                         args=self.grpo,
@@ -154,85 +155,3 @@ class HFTrainer:
         self.wandb.log_best_checkpoint(best_checkpoint, best_metric)
         print(f"Best checkpoint: {best_checkpoint}")
         print(f"Best model saved to: {self.model_save_path}")
-
-# sft training and grpo training
-
-if __name__ == "__main__":
-    from script.HuggingfaceDownload import solve_model, solve_dataset
-    from script.DatatemplateEditor import Template
-    from script.helper.Collator import Collator
-
-    model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",
-                                             load_in_n_bit=4,
-                                             unsloth_mode=False)
-    model, tokenizer = loaded_model[:2]
-    processor = loaded_model[-1] if len(loaded_model) == 3 else None
-    model_solver.status_report()
-    dataset_path = "/home/third/Desktop/simulationv2/Dataset/multimodal_multi_image_dataset.csv"
-    # dataset = read_csv(dataset_path)
-    dataset_solver, dataset = solve_dataset(
-        # "SakanaAI/JA-Multi-Image-VQA" #,
-        "geshang/FCoT"
-    )
-    model.print_trainable_parameters()
-    dataset = dataset['train']
-
-    # SFT
-    # key_map = {
-    #     "image": ["image"],
-    #     "text": ["thinking", "problem", "solution"],
-    # }
-    #
-    # key_owner = {
-    #     "system": ["system_prompt"],
-    #     "user": ["problem", "image"],
-    #     "assistant": ["thinking", "solution"],
-    # }
-    #
-    # template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
-    #                     dataset_name="geshang/FCoT", key_map=key_map, key_owner=key_owner)
-    # train_dataset, eval_dataset, test_dataset = template.solve()
-    # print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
-    #
-    # vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
-    # trainer = HFTrainer(model_name="geshang/Seg-R1-3B",
-    #                     dataset_name="geshang/FCoT",
-    #                     train_data=train_dataset,
-    #                     eval_data=eval_dataset,
-    #                     test_data=test_dataset,
-    #                     model=model,
-    #                     tokenizer=tokenizer,
-    #                     processor=processor,
-    #                     collator=vision_collator,
-    #                     selected_trainer='sft')
-    # trainer.train_hf_model()
-
-    #GRPO
-    key_map = {
-        "image": ["image"],
-        "text": ["problem","solution"], # state of data that will be loaded
-    }
-
-    key_owner = {
-        "system": ["system_prompt"],
-        "user": ["problem", "image"],
-        "assistant": [],
-    }
-
-    template = Template(dataset=dataset, tokenizer=tokenizer, model_name="geshang/Seg-R1-3B",
-                        dataset_name="geshang/FCoT", key_map=key_map, key_owner=key_owner,set_add_generation_prompt=True,temp_for='grpo') # for model to generate answer
-    train_dataset, eval_dataset, test_dataset = template.solve()
-    print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
-
-    vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
-    trainer = HFTrainer(model_name="geshang/Seg-R1-3B",
-                        dataset_name="geshang/FCoT",
-                        train_data=train_dataset,
-                        eval_data=eval_dataset,
-                        test_data=test_dataset,
-                        model=model,
-                        tokenizer=tokenizer,
-                        processor=processor,
-                        collator=vision_collator,
-                        selected_trainer='grpo')
-    trainer.train_hf_model()

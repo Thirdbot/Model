@@ -151,7 +151,7 @@ class ModelSolver:
             torch_dtype="auto",
         )
 
-        model = PeftModel.from_pretrained(model, adapter_path)
+        model = PeftModel.from_pretrained(model, adapter_path,is_trainable=True)
 
         processor = AutoProcessor.from_pretrained(base_model, use_fast=False)
 

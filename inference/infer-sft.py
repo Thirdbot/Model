@@ -4,7 +4,7 @@ from pathlib import Path
 
 import torch
 
-from script.FolderManager import manager
+from script.helper.FolderManager import manager
 from script.HuggingfaceDownload import solve_dataset, solve_model
 from script.DatatemplateEditor import Template
 

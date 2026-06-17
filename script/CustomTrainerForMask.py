@@ -1,5 +1,4 @@
 import torch
-import os
 from peft import get_peft_model, prepare_model_for_kbit_training
 
 def dice_loss_from_logits(logits, target, eps=1.0):
@@ -35,6 +34,7 @@ def train_mask_decoder_loop(
     model,
     dataloader,
     epochs=10,
+    mask_decoder=None,
     peft_config=None,
     lr=2e-5,
     grad_accum_steps=1,
@@ -122,13 +122,12 @@ def save_vlm_and_mask_decoder(
     mask_decoder,
     tokenizer=None,
     processor=None,
-    output_dir="outputs/mask_model",
+    output_dir = None,
     extra_config=None,
 ):
-    os.makedirs(output_dir, exist_ok=True)
 
-    vlm_dir = os.path.join(output_dir, "vlm_lora")
-    tokenizer_dir = os.path.join(output_dir, "tokenizer")
+    vlm_dir = output_dir.joinpath("vlm_lora")
+    tokenizer_dir = output_dir.joinpath("tokenizer")
 
     # Save LoRA adapter if model is PEFT model.
     # For PEFT, this saves adapter weights, not full base model.
@@ -147,94 +146,6 @@ def save_vlm_and_mask_decoder(
             "mask_decoder_class": mask_decoder.__class__.__name__,
             "extra_config": extra_config or {},
         },
-        os.path.join(output_dir, "mask_decoder.pt"),
+        output_dir.joinpath("mask_decoder.pt"),
     )
     print(f"Mask decoder saved to {output_dir}")
-
-
-if __name__ == "__main__":
-    from torch.utils.data import DataLoader
-    from script.HuggingfaceDownload import solve_model, solve_dataset
-    from script.DatatemplateEditor import Template
-    from script.helper.Collator import Collator
-    from script.helper.MaskDecoder import MaskDecoder
-    from script.CustomModel import AddModelToken, VLMWithMaskDecoder
-
-    model_solver, loaded_model = solve_model(
-        "geshang/Seg-R1-3B",
-        load_in_n_bit=4,
-        unsloth_mode=False,
-    )
-
-    model, tokenizer = loaded_model[:2]
-    processor = loaded_model[-1] if len(loaded_model) == 3 else None
-
-    # Add <SEG>
-    token_helper = AddModelToken(model, tokenizer=tokenizer, processor=processor)
-    model = token_helper.get_model()
-    tokenizer = token_helper.get_tokenizer()
-    seg_token_id = token_helper.seg_token_id
-    seg_token = token_helper.SEG_TOKEN
-
-    dataset_solver, dataset = solve_dataset("thirdExec/synthetic-seismic-vlm")
-    dataset = dataset["train"]
-
-    key_map = {
-        "image": ["images"],
-        "text": ["thinking", "problem", "solution"],
-    }
-
-    key_owner = {
-        "system": ["system_prompt"],
-        "user": ["problem", "images"],
-        "assistant": ["thinking", "solution"],
-    }
-
-    template = Template(
-        dataset=dataset,
-        tokenizer=tokenizer,
-        model_name="geshang/Seg-R1-3B",
-        dataset_name="thirdExec/synthetic-seismic-vlm",
-        key_map=key_map,
-        key_owner=key_owner,
-        temp_for="sft",
-        additional_images=["mask_images"],
-        additional_tokens=[seg_token]
-    )
-
-    train_dataset, eval_dataset, test_dataset = template.solve()
-    print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
-
-    collator = Collator(
-        dataset=dataset,
-        tokenizer=tokenizer,
-        processor=processor,
-    )
-
-    dataloader = DataLoader(
-        train_dataset,
-        batch_size=1,
-        shuffle=True,
-        collate_fn=collator.tasks_collate,
-    )
-
-    hidden_size = model.config.hidden_size
-    mask_decoder = MaskDecoder(
-        hidden_size=hidden_size,
-    ).cuda()
-
-    custom_model = VLMWithMaskDecoder(
-        vlm=model,
-        mask_decoder=mask_decoder,
-        seg_token_id=seg_token_id,
-    )
-
-    model,mask_decoder = train_mask_decoder_loop(
-        model=custom_model,
-        dataloader=dataloader,
-        epochs=10,
-        peft_config=model_solver.peft_config,
-        device="cuda",
-    )
-
-    save_vlm_and_mask_decoder(model, mask_decoder, tokenizer, processor)

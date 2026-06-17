@@ -34,8 +34,6 @@ class Collator:
             if not isinstance(example_images, list):
                 example_images = [example_images]
             for image in example_images:
-                if getattr(image, "mode", None) != "RGB":
-                    image = image.convert("RGB")
                 images.append(image)
 
         batch = self.processor(
@@ -57,8 +55,6 @@ class Collator:
                 if not isinstance(example_images, list):
                     example_images = [example_images]
                 for image in example_images:
-                    # if getattr(image, "mode", None) != "RGB":
-                    #     image = image.convert("RGB") # no RGB
                     images.append(image)
 
             batch = self.processor(

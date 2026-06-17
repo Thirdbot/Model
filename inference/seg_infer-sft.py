@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from PIL import Image, ImageDraw, ImageFont
 from peft import PeftModel
 
-from script.FolderManager import manager
+from script.helper.FolderManager import manager
 from script.HuggingfaceDownload import solve_dataset, solve_model
 from script.DatatemplateEditor import Template
 

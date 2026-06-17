@@ -4,7 +4,7 @@ from pathlib import Path
 from script.HuggingfaceTrainer import HFTrainer
 from script.helper.Collator import Collator
 
-from script.FolderManager import  manager
+from script.helper.FolderManager import  manager
 from script.HuggingfaceDownload import solve_dataset, solve_model
 from script.DatatemplateEditor import Template
 
@@ -17,7 +17,9 @@ def train_model(model_repo_id,
                 add_prompt_gen=False,
                 epochs=1,
                 batch_size=1,
-                train_mode='sft'):
+                train_mode='sft',
+                resume_model_type='sft'):
+    is_peft_applied = False
     # download model and dataset
     model_solver, loaded_model = solve_model(model_repo_id,
                                              load_in_n_bit=load_in_n_bit,
@@ -38,8 +40,10 @@ def train_model(model_repo_id,
         #load local if exists
         model, processor = model_solver.load_save_model(
             at_dataset=dataset_repo_id,
-            method=train_mode,
+            method=resume_model_type,
         )
+        print(f"load local model from:{model_repo_id}/{dataset_repo_id}")
+        is_peft_applied = True
     except Exception as e:
         print("could not load local model, will train from scratch")
 
@@ -63,7 +67,7 @@ def train_model(model_repo_id,
     dataset = dataset['train']
 
     template = Template(dataset=dataset, tokenizer=tokenizer, model_name=model_repo_id, dataset_name=dataset_repo_id,
-                        key_map=key_map, key_owner=key_owner,set_add_generation_prompt=add_prompt_gen,
+                        key_map=key_map, key_owner=key_owner,set_add_generation_prompt=add_prompt_gen,temp_for=train_mode,
                         additional_tokens=[],additional_images=[])
 
     train_dataset, eval_dataset, test_dataset = template.solve()
@@ -83,9 +87,9 @@ def train_model(model_repo_id,
                         processor=processor,
                         collator=vision_collator,
                         selected_trainer=train_mode,
-                        peft_config=model_solver.peft_config,
+                        peft_config=model_solver.peft_config if not is_peft_applied else None,
                         epochs=epochs,
-                        batch_size=batch_size
+                        batch_size=batch_size,
                         )
     trainer.train_hf_model()
 
@@ -106,8 +110,8 @@ if __name__ == "__main__":
     manager() # create folder
     train_model(model_repo_id="geshang/Seg-R1-3B", dataset_repo_id="thirdExec/synthetic-seismic-vlm",
                 unsloth_mode=False, load_in_n_bit=4,add_prompt_gen=False,
-                key_map=key_map, key_owner=key_owner, train_mode='sft',
-                epochs=100,batch_size=2
+                key_map=key_map, key_owner=key_owner, train_mode='sft',resume_model_type='sft',
+                epochs=100,batch_size=1
                 )
 
 """
