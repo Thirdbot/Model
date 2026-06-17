@@ -34,7 +34,6 @@ def train_mask_decoder_loop(
     model,
     dataloader,
     epochs=10,
-    mask_decoder=None,
     peft_config=None,
     lr=2e-5,
     grad_accum_steps=1,
@@ -47,21 +46,9 @@ def train_mask_decoder_loop(
 
     model.config.use_cache = False
     model.train()
-    mask_decoder.train()
-
-    # 3. train only LoRA + mask decoder
-    for p in model.parameters():
-        p.requires_grad = False
-
-    for name, p in model.named_parameters():
-        if "lora" in name.lower():
-            p.requires_grad = True
-
-    for p in mask_decoder.parameters():
-        p.requires_grad = True
 
     params = [
-        p for p in list(model.parameters()) + list(mask_decoder.parameters())
+        p for p in list(model.parameters())
         if p.requires_grad
     ]
 
@@ -115,11 +102,10 @@ def train_mask_decoder_loop(
                 )
             global_step += 1
 
-    return model, mask_decoder
+    return model
 
 def save_vlm_and_mask_decoder(
     model,
-    mask_decoder,
     tokenizer=None,
     processor=None,
     output_dir = None,
@@ -131,7 +117,7 @@ def save_vlm_and_mask_decoder(
 
     # Save LoRA adapter if model is PEFT model.
     # For PEFT, this saves adapter weights, not full base model.
-    model.save_pretrained(vlm_dir)
+    model.vlm.save_pretrained(vlm_dir)
 
     if tokenizer is not None:
         tokenizer.save_pretrained(tokenizer_dir)
@@ -142,8 +128,8 @@ def save_vlm_and_mask_decoder(
     # Save custom mask decoder
     torch.save(
         {
-            "mask_decoder_state_dict": mask_decoder.state_dict(),
-            "mask_decoder_class": mask_decoder.__class__.__name__,
+            "mask_decoder_state_dict": model.mask_decoder.state_dict(),
+            "mask_decoder_class": model.mask_decoder.__class__.__name__,
             "extra_config": extra_config or {},
         },
         output_dir.joinpath("mask_decoder.pt"),

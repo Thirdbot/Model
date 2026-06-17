@@ -94,17 +94,16 @@ def train_model(model_repo_id,
         seg_token_id=seg_token_id,
     )
 
-    model, mask_decoder = train_mask_decoder_loop(
+    model = train_mask_decoder_loop(
         model=custom_model,
         dataloader=dataloader,
-        mask_decoder=mask_decoder,
         epochs=epochs,
         peft_config=model_solver.peft_config if not is_peft_applied else None,
         device="cuda",
     )
     root_path = Path(load_config("paths")['root'])
     model_save_path = root_path / load_config("paths")['dirs']['saves'] / train_mode / model_repo_id / dataset_repo_id  # grpo / sft / custom_*
-    save_vlm_and_mask_decoder(model, mask_decoder, tokenizer, processor,output_dir=model_save_path)
+    save_vlm_and_mask_decoder(model, tokenizer, processor,output_dir=model_save_path)
 
 if __name__ == "__main__":
     key_map = {

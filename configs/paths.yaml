@@ -13,7 +13,6 @@ subdirs:
   test_outputs: ${dirs.test}/models
 
 create:
-    - ${dirs.custom}
     - ${dirs.saves}
     - ${dirs.train}
     - ${dirs.test}

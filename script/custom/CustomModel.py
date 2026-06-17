@@ -31,8 +31,8 @@ class AddModelToken:
         )
 
         if added > 0:
-            model.resize_token_embeddings(len(tokenizer))
-        self.seg_token_id = tokenizer.convert_tokens_to_ids(self.SEG_TOKEN)
+            model.resize_token_embeddings(len(self.real_tokenizer))
+        self.seg_token_id = self.real_tokenizer.convert_tokens_to_ids(self.SEG_TOKEN)
 
 
     def get_model(self):
@@ -74,7 +74,13 @@ class VLMWithMaskDecoder(torch.nn.Module):
             raise ValueError("No <SEG> token found in batch.")
 
         seg_hidden = get_seg_hidden(hidden, batch["input_ids"], self.seg_token_id)
+        decoder_param = next(self.mask_decoder.parameters())
 
+        seg_hidden = seg_hidden.to(
+            device=decoder_param.device,
+            dtype=decoder_param.dtype,
+        )
+        
         mask_logits = self.mask_decoder(seg_hidden)
 
         if mask is None:
