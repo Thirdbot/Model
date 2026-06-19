@@ -108,13 +108,13 @@ def train_model(model_repo_id,
 if __name__ == "__main__":
     key_map = {
         "image": ["images"],
-        "text": ["thinking", "problem", "solution"],
+        "text": ["instruction","reason", "question","evidence", "answer"],
     }
 
     key_owner = {
-        "system": ["system_prompt"],
-        "user": ["problem", "images"],
-        "assistant": ["thinking", "solution"],
+        "system": ["instruction"],
+        "user": ["question", "images"],
+        "assistant": ["evidence","reason", "answer"],
     }
 
     train_model(model_repo_id="geshang/Seg-R1-3B",

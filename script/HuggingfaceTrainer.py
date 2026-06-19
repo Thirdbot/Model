@@ -8,7 +8,9 @@ from script.WandbLogger import WandbLogger
 from configs.configs import load_config
 
 class HFTrainer:
-    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,model_name,dataset_name,peft_config=None,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None,wandb_logger=None,epochs=1,batch_size=1):
+    def __init__(self,train_data,test_data,eval_data,model,tokenizer,processor,model_name,dataset_name,
+                 peft_config=None,selected_trainer='sft',sft_config=None,grpo_config=None,collator=None,
+                 wandb_logger=None,epochs=1,batch_size=1,num_generation=2,generation_batch_size=2):
 
         self.train_data = train_data
         self.test_data = test_data
@@ -19,6 +21,7 @@ class HFTrainer:
         self.processor = processor
         self.tokenizer = tokenizer
         self.batch_size = batch_size
+
         self.model = model
         self.model_name = model_name
         self.dataset_name = dataset_name
@@ -63,6 +66,8 @@ class HFTrainer:
         self.grpo_config = grpo_config or {
             "output_dir": self.model_save_checkpoint_path.as_posix(),
             "per_device_train_batch_size": self.batch_size,
+            "num_generations":num_generation,
+            "generation_batch_size":generation_batch_size,
             "gradient_accumulation_steps": 8,
             "gradient_checkpointing": False,
             "learning_rate": 1e-6,

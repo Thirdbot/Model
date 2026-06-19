@@ -91,7 +91,8 @@ class Collator:
                 elif isinstance(mask, Image.Image):
                     # PIL PNG mask -> grayscale numpy array -> tensor
                     arr = numpy.array(mask.convert("L"))
-                    mask = torch.from_numpy(arr)
+                    mask = (numpy.array(arr) > 0).astype("float32")
+                    mask = torch.from_numpy(mask)
                 else:
                     # numpy array or other array-like object
                     arr = numpy.asarray(mask)

@@ -118,6 +118,7 @@ class Template:
                     masks.extend(mask_value)
                 else:
                     masks.append(mask_value)
+                continue
 
             value = example[img_k]
 
