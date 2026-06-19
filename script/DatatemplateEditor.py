@@ -4,8 +4,6 @@ Template and dataset alignment for compatibility, for now just only set up templ
 import json
 from pathlib import Path
 
-from numpy.distutils.fcompiler import none
-
 from configs import load_config
 
 class Template:
@@ -149,7 +147,15 @@ class Template:
 
             prompt.append(packed_data["user_template"])
 
-            solution = example['solution']
+            target_parts = []
+            for key in ("evidence", "reason", "answer"):
+                value = example[key]
+                if isinstance(value, list):
+                    target_parts.extend(str(item) for item in value)
+                else:
+                    target_parts.append(str(value))
+
+            solution = "\n".join(target_parts)
             extend_data = {"prompt":prompt,"images":images,"target":solution}
             return extend_data
         else:
@@ -170,7 +176,16 @@ class Template:
         text = getattr(self,'text')
         image = getattr(self,'image')
 
-        text_content_resolve = {f"{text_col}": {"type":"text","text":f"{'' if not self.additional_tokens else self.additional_tokens[0]}{example[text_col]}\n"} for text_col in text if self._valid_key(text_col,example)}
+        text_content_resolve = {}
+        for text_col in text:
+            if not self._valid_key(text_col, example):
+                continue
+
+            text_content_resolve[text_col] = {
+                "type": "text",
+                "text": f"{example[text_col]}\n",
+            }
+
         image_content_resolve = {f"{image_col}": [{"type":"image"} for _ in range(0,len(example[image_col]) if isinstance(example[image_col],list) else 1)] for image_col in image if example[image_col] is not None}
 
         extends_content = text_content_resolve | image_content_resolve

@@ -22,12 +22,8 @@ def get_seg_hidden(hidden, input_ids, seg_token_id):
     if not seg_mask.any():
         raise ValueError("No <SEG> token found in batch.")
 
-    # require exactly one <SEG> per sample
-    if not torch.all(seg_mask.sum(dim=1) == 1):
-        raise ValueError("Each sample must contain exactly one <SEG> token.")
-
     b_idx, t_idx = seg_mask.nonzero(as_tuple=True)
-    return hidden[b_idx, t_idx]  # [B, D]
+    return hidden[b_idx, t_idx]  # [num_seg_tokens, D]
 
 
 def train_mask_decoder_loop(

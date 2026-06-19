@@ -3,32 +3,36 @@ import torch.nn.functional as F
 
 
 def get_seg_hidden(hidden, input_ids, seg_token_id):
-    import torch
-
     seg_pos = input_ids.eq(seg_token_id)  # [B, L]
-    has_seg = seg_pos.any(dim=1)
 
-    if not has_seg.all():
-        bad_rows = (~has_seg).nonzero(as_tuple=True)[0].tolist()
-        raise ValueError(f"No <SEG> token found in rows: {bad_rows}")
+    if not seg_pos.any():
+        raise ValueError("No <SEG> token found in batch.")
 
-    # first <SEG> per sample
-    seg_idx = seg_pos.float().argmax(dim=1)
-    b_idx = torch.arange(input_ids.size(0), device=input_ids.device)
+    b_idx, t_idx = seg_pos.nonzero(as_tuple=True)
 
-    return hidden[b_idx, seg_idx]  # [B, D]
+    return hidden[b_idx, t_idx]  # [num_seg_tokens, D]
 
 class AddModelToken:
-    def __init__(self,model,tokenizer=None,processor=None):
+    def __init__(self,model,tokenizer=None,processor=None,additional_tokens=None,seg_token="<SEG>"):
         self.model = model
         self.tokenizer = tokenizer
         self.processor = processor
-        self.SEG_TOKEN = "<SEG>"
+        self.SEG_TOKEN = seg_token
         self.real_tokenizer = self.processor.tokenizer if hasattr(self.processor, "tokenizer") else self.tokenizer
+        self.additional_tokens = list(additional_tokens or [self.SEG_TOKEN])
 
-        added = self.real_tokenizer.add_special_tokens(
-            {"additional_special_tokens": [self.SEG_TOKEN]}
-        )
+        if self.SEG_TOKEN not in self.additional_tokens:
+            self.additional_tokens.append(self.SEG_TOKEN)
+
+        try:
+            added = self.real_tokenizer.add_special_tokens(
+                {"additional_special_tokens": self.additional_tokens},
+                replace_additional_special_tokens=False,
+            )
+        except TypeError:
+            added = self.real_tokenizer.add_special_tokens(
+                {"additional_special_tokens": self.additional_tokens}
+            )
 
         if added > 0:
             model.resize_token_embeddings(len(self.real_tokenizer))
@@ -104,12 +108,11 @@ class VLMWithMaskDecoder(torch.nn.Module):
         if target.max() > 1:
             target = (target > 0).float()
 
-        # batch mismatch check
         if mask_logits.shape[0] != target.shape[0]:
             raise ValueError(
                 f"Pred/target batch mismatch: "
-                f"mask_logits={mask_logits.shape}, gt_mask={gt_mask.shape}. "
-                f"Probably multiple <SEG> tokens or wrong mask batching."
+                f"mask_logits={mask_logits.shape}, target={target.shape}. "
+                f"Each <SEG> token must have exactly one target mask."
             )
 
         # CRITICAL FIX: resize target to decoder output size

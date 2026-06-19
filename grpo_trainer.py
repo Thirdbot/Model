@@ -100,12 +100,12 @@ if __name__ == "__main__":
     # example keys mapping for sft training
     key_map = {
         "image": ["images"],
-        "text": ["problem", "solution"],  # state of data that will be loaded
+        "text": ["instruction", "question", "evidence", "reason", "answer"],
     }
 
     key_owner = {
-        "system": ["system_prompt"],
-        "user": ["problem", "images"],
+        "system": ["instruction"],
+        "user": ["question", "images"],
         "assistant": [],
     }
     manager() # create folder

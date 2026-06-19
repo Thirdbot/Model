@@ -10,6 +10,27 @@ from script.helper.Collator import Collator
 from script.helper.MaskDecoder import MaskDecoder
 from script.custom.CustomModel import AddModelToken, VLMWithMaskDecoder
 
+ADDITIONAL_TOKENS = [
+    "<region>",
+    "</region>",
+    "<object>",
+    "</object>",
+    "<class_id>",
+    "</class_id>",
+    "<color>",
+    "</color>",
+    "<evidence>",
+    "</evidence>",
+    "<bbox>",
+    "</bbox>",
+    "<think>",
+    "</think>",
+    "<answer>",
+    "</answer>",
+    "<SEG>",
+]
+
+
 def train_model(model_repo_id,
                 dataset_repo_id,
                 unsloth_mode=False,
@@ -44,12 +65,16 @@ def train_model(model_repo_id,
     except Exception as e:
         print("could not load local model, will train from scratch")
 
-    # Add <SEG>
-    token_helper = AddModelToken(model, tokenizer=tokenizer, processor=processor)
+    token_helper = AddModelToken(
+        model,
+        tokenizer=tokenizer,
+        processor=processor,
+        additional_tokens=ADDITIONAL_TOKENS,
+        seg_token="<SEG>",
+    )
     model = token_helper.get_model()
     tokenizer = token_helper.get_tokenizer()
     seg_token_id = token_helper.seg_token_id
-    seg_token = token_helper.SEG_TOKEN
 
     dataset_solver, dataset = solve_dataset(dataset_repo_id)
     dataset = dataset["train"]
@@ -63,8 +88,8 @@ def train_model(model_repo_id,
         key_owner=key_owner,
         temp_for=train_mode,
         set_add_generation_prompt=add_prompt_gen,
-        additional_images=["mask_images"],
-        additional_tokens=[seg_token]
+        additional_images=["masks"],
+        additional_tokens=ADDITIONAL_TOKENS,
     )
 
     train_dataset, eval_dataset, test_dataset = template.solve()
@@ -107,7 +132,7 @@ def train_model(model_repo_id,
 
 if __name__ == "__main__":
     key_map = {
-        "image": ["images"],
+        "image": ["images", "masks"],
         "text": ["instruction","reason", "question","evidence", "answer"],
     }
 
