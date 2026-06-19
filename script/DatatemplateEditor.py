@@ -5,17 +5,23 @@ import json
 from pathlib import Path
 
 from configs import load_config
+from script.helper.special_tokens import SPECIAL_TOKENS, register_special_tokens
 
 class Template:
-    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft',additional_images=None,additional_tokens=None):
-        self.tokenizer = tokenizer
+    def __init__(self,tokenizer,dataset,model_name,dataset_name,key_map,key_owner,system_message="",set_add_generation_prompt=False,temp_for='sft',additional_images=None,additional_tokens=None,model=None,processor=None):
+        self.model, self.tokenizer, self.processor, self.seg_token_id = register_special_tokens(
+            model=model,
+            tokenizer=tokenizer,
+            processor=processor,
+            special_tokens=additional_tokens or SPECIAL_TOKENS,
+        )
         self.model_name = model_name
         self.dataset = dataset
         self.dataset_name = dataset_name
         self.test_size = 0.2
         self.temp_for = temp_for
         self.additional_images = additional_images or []
-        self.additional_tokens = additional_tokens or None
+        self.additional_tokens = additional_tokens or SPECIAL_TOKENS
 
         self.set_add_generation_prompt = False or set_add_generation_prompt
         self.set_tokenize = False

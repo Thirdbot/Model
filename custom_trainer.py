@@ -8,27 +8,7 @@ from script.HuggingfaceDownload import solve_model, solve_dataset
 from script.DatatemplateEditor import Template
 from script.helper.Collator import Collator
 from script.helper.MaskDecoder import MaskDecoder
-from script.custom.CustomModel import AddModelToken, VLMWithMaskDecoder
-
-ADDITIONAL_TOKENS = [
-    "<region>",
-    "</region>",
-    "<object>",
-    "</object>",
-    "<class_id>",
-    "</class_id>",
-    "<color>",
-    "</color>",
-    "<evidence>",
-    "</evidence>",
-    "<bbox>",
-    "</bbox>",
-    "<think>",
-    "</think>",
-    "<answer>",
-    "</answer>",
-    "<SEG>",
-]
+from script.custom.CustomModel import VLMWithMaskDecoder
 
 
 def train_model(model_repo_id,
@@ -65,17 +45,6 @@ def train_model(model_repo_id,
     except Exception as e:
         print("could not load local model, will train from scratch")
 
-    token_helper = AddModelToken(
-        model,
-        tokenizer=tokenizer,
-        processor=processor,
-        additional_tokens=ADDITIONAL_TOKENS,
-        seg_token="<SEG>",
-    )
-    model = token_helper.get_model()
-    tokenizer = token_helper.get_tokenizer()
-    seg_token_id = token_helper.seg_token_id
-
     dataset_solver, dataset = solve_dataset(dataset_repo_id)
     dataset = dataset["train"]
 
@@ -89,8 +58,13 @@ def train_model(model_repo_id,
         temp_for=train_mode,
         set_add_generation_prompt=add_prompt_gen,
         additional_images=["masks"],
-        additional_tokens=ADDITIONAL_TOKENS,
+        model=model,
+        processor=processor,
     )
+    model = template.model
+    tokenizer = template.tokenizer
+    processor = template.processor
+    seg_token_id = template.seg_token_id
 
     train_dataset, eval_dataset, test_dataset = template.solve()
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")

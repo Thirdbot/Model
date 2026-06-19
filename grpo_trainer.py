@@ -69,7 +69,10 @@ def train_model(model_repo_id,
 
     template = Template(dataset=dataset, tokenizer=tokenizer, model_name=model_repo_id, dataset_name=dataset_repo_id,
                         key_map=key_map, key_owner=key_owner,set_add_generation_prompt=add_prompt_gen,temp_for=train_mode,
-                        additional_tokens=[],additional_images=[])
+                        additional_images=[],model=model,processor=processor)
+    model = template.model
+    tokenizer = template.tokenizer
+    processor = template.processor
 
     train_dataset, eval_dataset, test_dataset = template.solve()
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")

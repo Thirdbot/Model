@@ -12,37 +12,6 @@ def get_seg_hidden(hidden, input_ids, seg_token_id):
 
     return hidden[b_idx, t_idx]  # [num_seg_tokens, D]
 
-class AddModelToken:
-    def __init__(self,model,tokenizer=None,processor=None,additional_tokens=None,seg_token="<SEG>"):
-        self.model = model
-        self.tokenizer = tokenizer
-        self.processor = processor
-        self.SEG_TOKEN = seg_token
-        self.real_tokenizer = self.processor.tokenizer if hasattr(self.processor, "tokenizer") else self.tokenizer
-        self.additional_tokens = list(additional_tokens or [self.SEG_TOKEN])
-
-        if self.SEG_TOKEN not in self.additional_tokens:
-            self.additional_tokens.append(self.SEG_TOKEN)
-
-        try:
-            added = self.real_tokenizer.add_special_tokens(
-                {"additional_special_tokens": self.additional_tokens},
-                replace_additional_special_tokens=False,
-            )
-        except TypeError:
-            added = self.real_tokenizer.add_special_tokens(
-                {"additional_special_tokens": self.additional_tokens}
-            )
-
-        if added > 0:
-            model.resize_token_embeddings(len(self.real_tokenizer))
-        self.seg_token_id = self.real_tokenizer.convert_tokens_to_ids(self.SEG_TOKEN)
-
-
-    def get_model(self):
-        return self.model
-    def get_tokenizer(self):
-        return self.real_tokenizer
 
 class VLMWithMaskDecoder(torch.nn.Module):
     def __init__(self, vlm, mask_decoder, seg_token_id):
