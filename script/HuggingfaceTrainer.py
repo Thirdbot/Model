@@ -48,6 +48,7 @@ class HFTrainer:
             "learning_rate":2e-5,
             "max_length":2048,
             "dataset_text_field":"text",
+            "dataset_kwargs": {"skip_prepare_dataset": True},
             "save_strategy": "epoch",
             "save_total_limit": 2,
             "logging_steps": 10,

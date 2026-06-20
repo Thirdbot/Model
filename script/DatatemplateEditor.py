@@ -218,7 +218,7 @@ class Template:
 
     def _formatting_prompts_func(self,examples):
         convos = examples["messages"]
-        texts = [self.tokenizer.apply_chat_template(convo, tokenize=self.set_tokenize, add_generation_prompt=self.set_add_generation_prompt) for convo in convos]
+        texts = [self.tokenizer.apply_chat_template(convo, tokenize=self.set_tokenize,padding=True,truncation=True, add_generation_prompt=self.set_add_generation_prompt) for convo in convos]
         return {"text": texts,}
 
 
