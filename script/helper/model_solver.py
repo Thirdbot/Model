@@ -146,20 +146,33 @@ class ModelSolver:
     @staticmethod
     def load_trained_model(base_model, adapter_path):
         adapter_path = Path(adapter_path)
-        model = AutoModelForImageTextToText.from_pretrained(
-            base_model,
-            device_map="auto",
-            torch_dtype="auto",
-        )
-
-        model = PeftModel.from_pretrained(model, adapter_path,is_trainable=True)
-
         processor_path = adapter_path if adapter_path.exists() else base_model
         try:
             processor = AutoProcessor.from_pretrained(processor_path, use_fast=False)
         except Exception:
             processor = AutoProcessor.from_pretrained(base_model, use_fast=False)
 
+        model = AutoModelForImageTextToText.from_pretrained(
+            base_model,
+            device_map="auto",
+            torch_dtype="auto",
+        )
+
+        tokenizer = getattr(processor, "tokenizer", processor)
+        if tokenizer is not None:
+            model.resize_token_embeddings(len(tokenizer))
+
+        try:
+            model = PeftModel.from_pretrained(model, adapter_path,is_trainable=True)
+        except RuntimeError as error:
+            if "size mismatch" not in str(error):
+                raise
+            model = PeftModel.from_pretrained(
+                model,
+                adapter_path,
+                is_trainable=True,
+                ignore_mismatched_sizes=True,
+            )
         return model, processor
 
     @staticmethod
