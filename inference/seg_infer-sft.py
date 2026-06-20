@@ -389,13 +389,13 @@ def main():
     dataset = dataset["train"]
 
     key_map = {
-        "image": ["images"],
-        "text": ["instruction", "problem", "thinking", "solution", "answer"],
+        "image": ["images", "masks"],
+        "text": ["instruction", "question", "evidence", "answer"],
     }
 
     key_owner = {
         "system": ["instruction"],
-        "user": ["problem", "images"],
+        "user": ["question", "images"],
         "assistant": [],
     }
 
@@ -408,9 +408,13 @@ def main():
         key_owner=key_owner,
         set_add_generation_prompt=True,
         temp_for="sft",
-        additional_images=["mask_images"],
-        additional_tokens=["<SEG>"]
+        additional_images=["masks"],
+        model=model,
+        processor=processor,
     )
+    model = template.model
+    processor = template.processor
+    seg_token_id = template.seg_token_id
 
     train_data, eval_data, test_data = template.solve()
 

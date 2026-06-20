@@ -133,14 +133,14 @@ def main():
 
     key_map = {
         "image": ["images"],
-        "text": ["instruction", "problem", "thinking", "solution", "answer"],
+        "text": ["instruction", "question", "evidence", "answer"],
     }
 
     # Important for inference:
     # assistant is empty, so template ends at assistant generation prompt.
     key_owner = {
         "system": ["instruction"],
-        "user": ["problem", "images"],
+        "user": ["question", "images"],
         "assistant": [],
     }
 
@@ -153,7 +153,11 @@ def main():
         key_owner=key_owner,
         set_add_generation_prompt=True,
         temp_for="sft",
+        model=model,
+        processor=processor,
     )
+    model = template.model
+    processor = template.processor
 
     train_data, eval_data, test_data = template.solve()
 
