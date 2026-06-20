@@ -55,18 +55,6 @@ class Template:
         eval_dataset = eval_dataset.map(self._message_to_template, remove_columns=dataset_columns)
         test_dataset = test_dataset.map(self._message_to_template, remove_columns=dataset_columns)
 
-        if 'grpo' in self.temp_for:
-            return train_dataset,eval_dataset,test_dataset
-
-        elif 'sft' in self.temp_for:
-            train_dataset = train_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
-            eval_dataset = eval_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
-            test_dataset = test_dataset.map(self._formatting_prompts_func, batched=True,remove_columns="messages")
-        else:
-            train_dataset = train_dataset.map(self._formatting_prompts_func, batched=True, remove_columns="messages")
-            eval_dataset = eval_dataset.map(self._formatting_prompts_func, batched=True, remove_columns="messages")
-            test_dataset = test_dataset.map(self._formatting_prompts_func, batched=True, remove_columns="messages")
-
         return train_dataset,eval_dataset,test_dataset
 
     def _set_key_mapping(self,keys,path):
@@ -154,7 +142,7 @@ class Template:
             prompt.append(packed_data["user_template"])
 
             target_parts = []
-            for key in ("evidence", "reason", "answer"):
+            for key in ("evidence", "answer"):
                 value = example[key]
                 if isinstance(value, list):
                     target_parts.extend(str(item) for item in value)
@@ -216,14 +204,7 @@ class Template:
         },extends_content
 
 
-    def _formatting_prompts_func(self,examples):
-        convos = examples["messages"]
-        texts = [self.tokenizer.apply_chat_template(convo, tokenize=self.set_tokenize, add_generation_prompt=self.set_add_generation_prompt) for convo in convos]
-        return {"text": texts,}
-
-
 if __name__ == "__main__":
-    from pandas import read_csv
     from script.HuggingfaceDownload import solve_model,solve_dataset
 
     model_solver, loaded_model = solve_model("geshang/Seg-R1-3B",

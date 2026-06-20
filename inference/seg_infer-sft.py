@@ -16,6 +16,7 @@ from script.HuggingfaceDownload import solve_dataset, solve_model
 from script.DatatemplateEditor import Template
 
 from script.helper.MaskDecoder import MaskDecoder
+from script.custom.CustomModel import get_image_features, get_seg_counts
 
 
 MODEL_SAVE_DIR = Path("outputs/mask_model")
@@ -272,7 +273,18 @@ def generate_one_with_mask(
 
     mask_decoder = mask_decoder.to(seg_hidden.device)
 
-    mask_logits = mask_decoder(seg_hidden)
+    image_features = get_image_features(
+        outputs=outputs,
+        seg_counts=get_seg_counts(generated, seg_token_id),
+        num_seg_tokens=seg_hidden.shape[0],
+    )
+    if image_features is not None:
+        image_features = image_features.to(
+            device=seg_hidden.device,
+            dtype=seg_hidden.dtype,
+        )
+
+    mask_logits = mask_decoder(seg_hidden, image_features=image_features)
 
     if mask_logits.ndim == 3:
         mask_logits = mask_logits.unsqueeze(1)

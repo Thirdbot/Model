@@ -3,6 +3,7 @@ from pathlib import Path
 
 from script.HuggingfaceTrainer import HFTrainer
 from script.helper.Collator import Collator
+from transformers import AutoProcessor
 
 from script.helper.FolderManager import  manager
 from script.HuggingfaceDownload import solve_dataset, solve_model
@@ -35,6 +36,8 @@ def train_model(model_repo_id,
     print("dataset:", dataset)
 
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
+    if processor is None:
+        processor = AutoProcessor.from_pretrained(model_solver.source, trust_remote_code=True, use_fast=False)
 
     try:
         #load local if exists
@@ -56,9 +59,7 @@ def train_model(model_repo_id,
     except Exception as e:
         print("Dataset needs conversion:")
 
-    model.gradient_checkpointing_disable()
-    if hasattr(model, "base_model"):
-        model.base_model.gradient_checkpointing_disable()
+    model.gradient_checkpointing_enable()
     model.config.use_cache = False
     model.enable_input_require_grads()
 
@@ -76,7 +77,7 @@ def train_model(model_repo_id,
     train_dataset, eval_dataset, test_dataset = template.solve()
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
-    vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
+    vision_collator = Collator(tokenizer=tokenizer, processor=processor,set_add_generation_prompt=add_prompt_gen).vision_language_collate
     # check if collator is working
     # batch = vision_collator([train_dataset[0]])
     # print((batch["labels"] != -100).sum())
@@ -111,7 +112,7 @@ if __name__ == "__main__":
         "assistant": ["evidence", "answer"], # "reason"
     }
     manager() # create folder
-    train_model(model_repo_id="geshang/Seg-R1-3B", dataset_repo_id="thirdExec/synthetic-seismic-vlm",
+    train_model(model_repo_id="Qwen/Qwen2-VL-2B-Instruct", dataset_repo_id="thirdExec/synthetic-seismic-vlm",
                 unsloth_mode=False, load_in_n_bit=8,add_prompt_gen=False,
                 key_map=key_map, key_owner=key_owner, train_mode='sft',resume_model_type='sft',
                 epochs=50,batch_size=1

@@ -758,7 +758,12 @@ class ModelSolver:
                 max_seq_length=self.max_seq_length,
                 use_gradient_checkpointing="unsloth"
             )
-        return model, tokenizer
+            processor = AutoProcessor.from_pretrained(
+                source,
+                trust_remote_code=True,
+                use_fast=False,
+            )
+        return model, tokenizer, processor
 
     def _load_llm_with_unsloth_quantized(self,source):
         from unsloth import FastLanguageModel
@@ -785,7 +790,12 @@ class ModelSolver:
                 load_in_16bit=self.load_16_bit,
                 use_gradient_checkpointing="unsloth"
             )
-        return model,tokenizer
+            processor = AutoProcessor.from_pretrained(
+                source,
+                trust_remote_code=True,
+                use_fast=False,
+            )
+        return model,tokenizer,processor
 
     def _slow_processor_for_unsloth(self):
         class SlowProcessorPatch:

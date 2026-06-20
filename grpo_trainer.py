@@ -3,6 +3,7 @@ from pathlib import Path
 
 from script.HuggingfaceTrainer import HFTrainer
 from script.helper.Collator import Collator
+from transformers import AutoProcessor
 
 from script.helper.FolderManager import  manager
 from script.HuggingfaceDownload import solve_dataset, solve_model
@@ -35,6 +36,8 @@ def train_model(model_repo_id,
     print("dataset:", dataset)
 
     processor = loaded_model[-1] if len(loaded_model) == 3 else None
+    if processor is None:
+        processor = AutoProcessor.from_pretrained(model_solver.source, trust_remote_code=True, use_fast=False)
 
     try:
         #load local if exists
@@ -77,7 +80,7 @@ def train_model(model_repo_id,
     train_dataset, eval_dataset, test_dataset = template.solve()
     print(f"{train_dataset[0]}\n\n{eval_dataset[0]}\n\n{test_dataset[0]}")
 
-    vision_collator = Collator(dataset=dataset, tokenizer=tokenizer, processor=processor).vision_language_collate
+    vision_collator = Collator(tokenizer=tokenizer, processor=processor,set_add_generation_prompt=add_prompt_gen).vision_language_collate
     # check if collator is working
     # batch = vision_collator([train_dataset[0]])
     # print((batch["labels"] != -100).sum())
@@ -103,7 +106,7 @@ if __name__ == "__main__":
     # example keys mapping for sft training
     key_map = {
         "image": ["images"],
-        "text": ["instruction", "question", "evidence", "reason", "answer"],
+        "text": ["instruction", "question", "evidence", "answer"],
     }
 
     key_owner = {

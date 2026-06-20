@@ -1,45 +1,67 @@
-import requests
 import torch
 import torch.nn as nn
-from PIL import Image
-from transformers import Sam2Model, Sam2Processor
 
 
 class MaskDecoder(nn.Module):
-    def __init__(self, hidden_size, width_size=500,height_size=100):
+    def __init__(
+        self,
+        hidden_size,
+        width_size=100,
+        height_size=507,
+        feature_channels=64,
+        feature_height=32,
+        feature_width=8,
+    ):
         super().__init__()
         self.width_size = width_size
         self.height_size = height_size
-        self.net = nn.Sequential(
-            nn.LayerNorm(hidden_size),
-            nn.Linear(hidden_size, hidden_size),
-            nn.GELU(),
-            nn.Linear(hidden_size, width_size * height_size),
+        self.feature_channels = feature_channels
+        self.feature_height = feature_height
+        self.feature_width = feature_width
+
+        self.fallback_image_features = nn.Parameter(
+            torch.randn(1, feature_channels, feature_height, feature_width) * 0.02
         )
 
-    def forward(self, seg_hidden):
-        logits = self.net(seg_hidden)
-        return logits.view(seg_hidden.size(0), 1, self.height_size, self.width_size)
+        self.query = nn.Sequential(
+            nn.LayerNorm(hidden_size),
+            nn.Linear(hidden_size, feature_channels),
+        )
 
-class SamDecoder:
-    def __init__(self):
-        self.model = Sam2Model.from_pretrained("facebook/sam2-hiera-base-plus")
-        self.processor = Sam2Processor.from_pretrained("facebook/sam2-hiera-base-plus")
+        self.image_projection = nn.LazyConv2d(feature_channels, kernel_size=1)
+        self.decoder = nn.Sequential(
+            nn.Conv2d(feature_channels, feature_channels, kernel_size=3, padding=1),
+            nn.GroupNorm(8, feature_channels),
+            nn.GELU(),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+            nn.Conv2d(feature_channels, feature_channels // 2, kernel_size=3, padding=1),
+            nn.GroupNorm(8, feature_channels // 2),
+            nn.GELU(),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+            nn.Conv2d(feature_channels // 2, feature_channels // 4, kernel_size=3, padding=1),
+            nn.GroupNorm(4, feature_channels // 4),
+            nn.GELU(),
+            nn.Conv2d(feature_channels // 4, 1, kernel_size=1),
+        )
 
-    def forward(self,image,bbox,input_labels):
-        inputs = self.processor(images=image, input_points=bbox, input_labels=input_labels,
-                           return_tensors="pt")
+    def forward(self, seg_hidden, image_features=None):
+        if image_features is None:
+            image_features = self.fallback_image_features.expand(
+                seg_hidden.size(0),
+                -1,
+                -1,
+                -1,
+            )
+        else:
+            image_features = self.image_projection(image_features)
 
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-        masks = self.processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
-        return masks
+        query = torch.sigmoid(self.query(seg_hidden)).unsqueeze(-1).unsqueeze(-1)
+        conditioned = image_features * query
 
-if __name__ == "__main__":
-    image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
-    raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
-    input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
-    input_labels = [[[1]]]
-    mask_decoder = SamDecoder()
-    masks = mask_decoder.forward(raw_image,input_points,input_labels)
-    print(masks)
+        logits = self.decoder(conditioned)
+        return torch.nn.functional.interpolate(
+            logits,
+            size=(self.height_size, self.width_size),
+            mode="bilinear",
+            align_corners=False,
+        )

@@ -6,32 +6,37 @@ from script.helper.special_tokens import SEG_TOKEN
 
 
 class Collator:
-    ASSISTANT_MARKER = "<|im_start|>assistant\n"
 
-    def __init__(self,dataset,tokenizer,processor):
+    def __init__(self,tokenizer,processor,set_add_generation_prompt=False,dataset=None):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.processor = processor
+        self.set_add_generation_prompt = set_add_generation_prompt
         self.text_tokenizer = self._resolve_text_tokenizer(tokenizer, processor)
-        self.assistant_marker_ids = self.text_tokenizer(
-            self.ASSISTANT_MARKER,
-            add_special_tokens=False,
-        )["input_ids"]
         self.seg_token_id = self.text_tokenizer.convert_tokens_to_ids(SEG_TOKEN)
 
-    def text_collate(self,examples):
-        print("using text collate")
-        texts = [ex["text"] for ex in examples]
+    def _format_messages(self, messages):
+        return self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=self.set_add_generation_prompt,
+        )
 
-        batch = self.text_tokenizer(texts,
-                                    padding=True,
-                                    truncation=True,
-                                    return_tensors="pt")
-        batch["labels"] = self._assistant_only_labels(batch)
-        return batch
+    def _format_prompt_messages(self, messages):
+        prompt_messages = [
+            message
+            for message in messages
+            if message.get("role") != "assistant"
+        ]
+        return self.tokenizer.apply_chat_template(
+            prompt_messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
 
     def vision_language_collate(self,examples):
-        texts = [ex["text"] for ex in examples]
+        texts = [self._format_messages(ex["messages"]) for ex in examples]
         images = []
         for ex in examples:
             example_images = ex["images"]
@@ -48,44 +53,77 @@ class Collator:
             padding=True,
             return_tensors="pt",
         )
-        batch["labels"] = self._assistant_only_labels(batch)
+        batch["labels"] = self._assistant_only_labels(examples, batch)
         return batch
 
     def tasks_collate(self, examples):
-            texts = [ex["text"] for ex in examples]
+        texts = [self._format_messages(ex["messages"]) for ex in examples]
 
-            images = []
-            for ex in examples:
-                example_images = ex["images"]
-                if not isinstance(example_images, list):
-                    example_images = [example_images]
-                for image in example_images:
-                    if getattr(image, "mode", None) != "RGB":
-                        image = image.convert("RGB")
-                    images.append(image)
+        images = []
+        for ex in examples:
+            example_images = ex["images"]
+            if not isinstance(example_images, list):
+                example_images = [example_images]
+            for image in example_images:
+                if getattr(image, "mode", None) != "RGB":
+                    image = image.convert("RGB")
+                images.append(image)
 
-            batch = self.processor(
-                text=texts,
-                images=images,
-                padding=True,
-                return_tensors="pt",
+        batch = self.processor(
+            text=texts,
+            images=images,
+            padding=True,
+            return_tensors="pt",
 
-            )
+        )
+        batch["labels"] = self._assistant_only_labels(examples, batch)
 
-            batch["labels"] = self._assistant_only_labels(batch)
+        masks = []
+        mask_counts = []
+        for ex in examples:
+            example_masks = self._extract_masks(ex)
+            mask_counts.append(len(example_masks))
+            masks.extend(example_masks)
 
-            masks = []
-            mask_counts = []
-            for ex in examples:
-                example_masks = self._extract_masks(ex)
-                mask_counts.append(len(example_masks))
-                masks.extend(example_masks)
+        self._validate_seg_mask_alignment(examples, batch, mask_counts)
 
-            self._validate_seg_mask_alignment(examples, batch, mask_counts)
+        if masks:
+            batch["masks"] = torch.stack(masks, dim=0)
+        return batch
 
-            if masks:
-                batch["masks"] = torch.stack(masks, dim=0)
-            return batch
+    def _assistant_only_labels(self, examples, batch):
+        labels = batch["input_ids"].clone()
+        labels[batch["attention_mask"] == 0] = -100
+
+        prompt_texts = [
+            self._format_prompt_messages(example["messages"])
+            for example in examples
+        ]
+        prompt_inputs = self.processor(
+            text=prompt_texts,
+            images=self._collect_images(examples),
+            padding=True,
+            return_tensors="pt",
+        )
+        prompt_lengths = prompt_inputs["attention_mask"].sum(dim=1).tolist()
+
+        for row_idx, prompt_length in enumerate(prompt_lengths):
+            labels[row_idx, :prompt_length] = -100
+
+        return labels
+
+    @staticmethod
+    def _collect_images(examples):
+        images = []
+        for ex in examples:
+            example_images = ex["images"]
+            if not isinstance(example_images, list):
+                example_images = [example_images]
+            for image in example_images:
+                if getattr(image, "mode", None) != "RGB":
+                    image = image.convert("RGB")
+                images.append(image)
+        return images
 
     def _extract_masks(self, example):
         mask = None
@@ -122,15 +160,11 @@ class Collator:
 
             raw_text = examples[idx].get("text", "")
             raw_seg_count = raw_text.count(SEG_TOKEN)
-            assistant_pos = raw_text.find(self.ASSISTANT_MARKER)
-            preview_start = assistant_pos if assistant_pos >= 0 else 0
-            preview = raw_text[preview_start:preview_start + 700].replace("\n", "\\n")
             raise ValueError(
                 "SEG/mask mismatch in collator: "
                 f"sample_index={idx}, tokenized_seg_count={seg_count}, "
                 f"raw_text_seg_count={raw_seg_count}, mask_count={mask_count}. "
                 f"Each {SEG_TOKEN} token must map to exactly one mask. "
-                f"text_preview={preview}"
             )
 
     @staticmethod
@@ -151,30 +185,6 @@ class Collator:
             tensor = (tensor > 0).float()
         return tensor
 
-    def _assistant_only_labels(self, batch):
-        labels = batch["input_ids"].clone()
-        labels[batch["attention_mask"] == 0] = -100
-
-        for row_idx, input_ids in enumerate(batch["input_ids"].tolist()):
-            assistant_start = self._find_subsequence(input_ids, self.assistant_marker_ids)
-            if assistant_start is None:
-                labels[row_idx, :] = -100
-                continue
-
-            answer_start = assistant_start + len(self.assistant_marker_ids)
-            labels[row_idx, :answer_start] = -100
-
-        return labels
-
-    @staticmethod
-    def _find_subsequence(values, pattern):
-        if not pattern:
-            return None
-        pattern_length = len(pattern)
-        for index in range(0, len(values) - pattern_length + 1):
-            if values[index:index + pattern_length] == pattern:
-                return index
-        return None
 
     @staticmethod
     def _resolve_text_tokenizer(tokenizer, processor):

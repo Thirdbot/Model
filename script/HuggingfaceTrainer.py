@@ -43,12 +43,11 @@ class HFTrainer:
         self.sft_config = sft_config or {
             "output_dir":self.model_save_checkpoint_path.as_posix(),
             "per_device_train_batch_size":self.batch_size,
-            "gradient_accumulation_steps":1,
+            "gradient_accumulation_steps":4,
             "gradient_checkpointing": False,
             "learning_rate":2e-5,
             "max_length":2048,
             "dataset_text_field":"text",
-            "dataset_kwargs": {"skip_prepare_dataset": True},
             "save_strategy": "epoch",
             "save_total_limit": 2,
             "logging_steps": 10,

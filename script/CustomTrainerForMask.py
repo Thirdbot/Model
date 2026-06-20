@@ -34,6 +34,7 @@ def train_mask_decoder_loop(
     lr=2e-5,
     grad_accum_steps=1,
     device="cuda",
+    wandb_logger=None,
 ):
     # Attach LoRA to the VLM only. The mask decoder remains a normal trainable
     # module, and model.vlm.save_pretrained(...) writes adapter_config.json.
@@ -78,10 +79,14 @@ def train_mask_decoder_loop(
                 loss = outputs["loss"]
                 text_loss = outputs.get("text_loss", loss)
                 mask_loss = outputs.get("mask_loss", None)
+                weighted_bce_loss = outputs.get("weighted_bce_loss", None)
+                dice_loss = outputs.get("dice_loss", None)
             else:
                 loss = outputs.loss
                 text_loss = getattr(outputs, "text_loss", loss)
                 mask_loss = getattr(outputs, "mask_loss", None)
+                weighted_bce_loss = getattr(outputs, "weighted_bce_loss", None)
+                dice_loss = getattr(outputs, "dice_loss", None)
 
             loss.backward()
 
@@ -91,12 +96,44 @@ def train_mask_decoder_loop(
                 optimizer.zero_grad(set_to_none=True)
 
             if global_step % 10 == 0:
+                loss_value = loss.item() * grad_accum_steps
+                text_loss_value = text_loss.item()
+                mask_loss_value = (
+                    mask_loss.item()
+                    if mask_loss is not None
+                    else float("nan")
+                )
+                weighted_bce_value = (
+                    weighted_bce_loss.item()
+                    if weighted_bce_loss is not None
+                    else float("nan")
+                )
+                dice_value = (
+                    dice_loss.item()
+                    if dice_loss is not None
+                    else float("nan")
+                )
                 print(
                     f"step={step} "
-                    f"loss={loss.item() * grad_accum_steps:.4f} "
-                    f"text loss={text_loss.item():.4f} "
-                    f"mask loss={mask_loss.item():.4f}"
+                    f"loss={loss_value:.4f} "
+                    f"text loss={text_loss_value:.4f} "
+                    f"mask loss={mask_loss_value:.4f} "
+                    f"weighted bce={weighted_bce_value:.4f} "
+                    f"dice={dice_value:.4f}"
                 )
+                if wandb_logger is not None and wandb_logger.run is not None:
+                    wandb_logger.run.log(
+                        {
+                            "train/loss": loss_value,
+                            "train/text_loss": text_loss_value,
+                            "train/mask_loss": mask_loss_value,
+                            "train/weighted_bce_loss": weighted_bce_value,
+                            "train/dice_loss": dice_value,
+                            "train/epoch": epoch + 1,
+                            "train/step": step,
+                        },
+                        step=global_step,
+                    )
             global_step += 1
 
     return model
