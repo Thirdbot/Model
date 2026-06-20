@@ -15,4 +15,4 @@ class MaskDecoder(nn.Module):
 
     def forward(self, seg_hidden):
         logits = self.net(seg_hidden)
-        return logits.view(seg_hidden.size(0), 1, self.width_size, self.height_size)
+        return logits.view(seg_hidden.size(0), 1, self.height_size, self.width_size)

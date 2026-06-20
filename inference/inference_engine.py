@@ -24,7 +24,7 @@ theme = gr.themes.Soft(
 )
 
 with gr.Blocks(theme=theme, title="Inference Engine") as app:
-    gr.Markdown("# Inference Engine")
+    gr.Markdown("Inference Engine")
 
     with gr.Row():
         with gr.Column(scale=2):

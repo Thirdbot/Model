@@ -102,19 +102,19 @@ if __name__ == "__main__":
     # example keys mapping for sft training
     key_map = {
         "image": ["images"],
-        "text": ["instruction", "question", "evidence", "reason", "answer"],
+        "text": ["instruction", "question", "evidence", "answer"], # "reason"
     }
 
     key_owner = {
         "system": ["instruction"],
         "user": ["question", "images"],
-        "assistant": ["evidence", "reason", "answer"],
+        "assistant": ["evidence", "answer"], # "reason"
     }
     manager() # create folder
     train_model(model_repo_id="geshang/Seg-R1-3B", dataset_repo_id="thirdExec/synthetic-seismic-vlm",
                 unsloth_mode=False, load_in_n_bit=4,add_prompt_gen=False,
                 key_map=key_map, key_owner=key_owner, train_mode='sft',resume_model_type='sft',
-                epochs=100,batch_size=1
+                epochs=50,batch_size=1
                 )
 
 """

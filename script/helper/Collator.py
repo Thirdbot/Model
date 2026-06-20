@@ -2,6 +2,8 @@ import numpy
 import torch
 from PIL import Image
 
+from script.helper.special_tokens import SEG_TOKEN
+
 
 class Collator:
     ASSISTANT_MARKER = "<|im_start|>assistant\n"
@@ -15,6 +17,7 @@ class Collator:
             self.ASSISTANT_MARKER,
             add_special_tokens=False,
         )["input_ids"]
+        self.seg_token_id = self.text_tokenizer.convert_tokens_to_ids(SEG_TOKEN)
 
     def text_collate(self,examples):
         print("using text collate")
@@ -71,34 +74,64 @@ class Collator:
 
             batch["labels"] = self._assistant_only_labels(batch)
 
-            # Keep every segmentation mask. The model flattens all <SEG> tokens
-            # across the batch and expects the same number of target masks.
             masks = []
+            mask_counts = []
             for ex in examples:
-                mask = None
-                for mask_key in (
-                    "target_mask",
-                    "primary_mask",
-                    "mask_image",
-                    "mask_images",
-                    "target_masks",
-                    "masks",
-                ):
-                    if mask_key in ex and ex[mask_key] is not None:
-                        mask = ex[mask_key]
-                        break
+                example_masks = self._extract_masks(ex)
+                mask_counts.append(len(example_masks))
+                masks.extend(example_masks)
 
-                if mask is None:
-                    continue
-
-                if isinstance(mask, list):
-                    masks.extend(self._mask_to_tensor(item) for item in mask)
-                else:
-                    masks.append(self._mask_to_tensor(mask))
+            self._validate_seg_mask_alignment(examples, batch, mask_counts)
 
             if masks:
                 batch["masks"] = torch.stack(masks, dim=0)
             return batch
+
+    def _extract_masks(self, example):
+        mask = None
+        for mask_key in (
+            "target_mask",
+            "primary_mask",
+            "mask_image",
+            "mask_images",
+            "target_masks",
+            "masks",
+        ):
+            if mask_key in example and example[mask_key] is not None:
+                mask = example[mask_key]
+                break
+
+        if mask is None:
+            return []
+
+        if isinstance(mask, list):
+            masks = [self._mask_to_tensor(item) for item in mask]
+        else:
+            masks = [self._mask_to_tensor(mask)]
+
+        return masks
+
+    def _validate_seg_mask_alignment(self, examples, batch, mask_counts):
+        if self.seg_token_id is None or self.seg_token_id < 0:
+            raise ValueError(f"{SEG_TOKEN} is not registered in the tokenizer.")
+
+        seg_counts = batch["input_ids"].eq(self.seg_token_id).sum(dim=1).tolist()
+        for idx, (seg_count, mask_count) in enumerate(zip(seg_counts, mask_counts)):
+            if seg_count == mask_count:
+                continue
+
+            raw_text = examples[idx].get("text", "")
+            raw_seg_count = raw_text.count(SEG_TOKEN)
+            assistant_pos = raw_text.find(self.ASSISTANT_MARKER)
+            preview_start = assistant_pos if assistant_pos >= 0 else 0
+            preview = raw_text[preview_start:preview_start + 700].replace("\n", "\\n")
+            raise ValueError(
+                "SEG/mask mismatch in collator: "
+                f"sample_index={idx}, tokenized_seg_count={seg_count}, "
+                f"raw_text_seg_count={raw_seg_count}, mask_count={mask_count}. "
+                f"Each {SEG_TOKEN} token must map to exactly one mask. "
+                f"text_preview={preview}"
+            )
 
     @staticmethod
     def _mask_to_tensor(mask):
