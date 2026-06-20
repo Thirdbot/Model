@@ -112,7 +112,7 @@ if __name__ == "__main__":
     }
     manager() # create folder
     train_model(model_repo_id="geshang/Seg-R1-3B", dataset_repo_id="thirdExec/synthetic-seismic-vlm",
-                unsloth_mode=True, load_in_n_bit=4,add_prompt_gen=False,
+                unsloth_mode=False, load_in_n_bit=8,add_prompt_gen=False,
                 key_map=key_map, key_owner=key_owner, train_mode='sft',resume_model_type='sft',
                 epochs=50,batch_size=1
                 )
