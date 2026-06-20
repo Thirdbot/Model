@@ -69,6 +69,19 @@ def get_images(example):
     return out
 
 
+def clean_prediction(text):
+    for token in (
+        "<|im_start|>",
+        "<|im_end|>",
+        "<|endoftext|>",
+        "<|vision_start|>",
+        "<|vision_end|>",
+        "<|image_pad|>",
+    ):
+        text = text.replace(token, "")
+    return text.strip()
+
+
 @torch.inference_mode()
 def generate_one(model, processor, example, max_new_tokens=512):
     text = example["text"]
@@ -96,7 +109,8 @@ def generate_one(model, processor, example, max_new_tokens=512):
     new_tokens = generated[:, prompt_len:]
 
     tokenizer = getattr(processor, "tokenizer", processor)
-    return tokenizer.batch_decode(new_tokens, skip_special_tokens=True)[0]
+    prediction = tokenizer.batch_decode(new_tokens, skip_special_tokens=False)[0]
+    return clean_prediction(prediction)
 
 
 def main():
