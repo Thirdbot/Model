@@ -35,10 +35,11 @@ def train_mask_decoder_loop(
     grad_accum_steps=1,
     device="cuda",
 ):
-    # 2. if quantized custom loop, attach LoRA manually
+    # Attach LoRA to the VLM only. The mask decoder remains a normal trainable
+    # module, and model.vlm.save_pretrained(...) writes adapter_config.json.
     if peft_config is not None:
-        model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(model, peft_config)
+        model.vlm = prepare_model_for_kbit_training(model.vlm)
+        model.vlm = get_peft_model(model.vlm, peft_config)
 
     model.config.use_cache = False
     model.train()
@@ -108,8 +109,11 @@ def save_vlm_and_mask_decoder(
     extra_config=None,
 ):
 
+    output_dir.mkdir(parents=True, exist_ok=True)
     vlm_dir = output_dir.joinpath("vlm_lora")
     tokenizer_dir = output_dir.joinpath("tokenizer")
+    vlm_dir.mkdir(parents=True, exist_ok=True)
+    tokenizer_dir.mkdir(parents=True, exist_ok=True)
 
     # Save LoRA adapter if model is PEFT model.
     # For PEFT, this saves adapter weights, not full base model.
