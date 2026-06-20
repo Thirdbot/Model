@@ -145,6 +145,7 @@ class ModelSolver:
 
     @staticmethod
     def load_trained_model(base_model, adapter_path):
+        adapter_path = Path(adapter_path)
         model = AutoModelForImageTextToText.from_pretrained(
             base_model,
             device_map="auto",
@@ -153,7 +154,11 @@ class ModelSolver:
 
         model = PeftModel.from_pretrained(model, adapter_path,is_trainable=True)
 
-        processor = AutoProcessor.from_pretrained(base_model, use_fast=False)
+        processor_path = adapter_path if adapter_path.exists() else base_model
+        try:
+            processor = AutoProcessor.from_pretrained(processor_path, use_fast=False)
+        except Exception:
+            processor = AutoProcessor.from_pretrained(base_model, use_fast=False)
 
         return model, processor
 
