@@ -103,21 +103,21 @@ class Template:
         masks = []
 
         for img_k in image_key:
-            # additional like mask
-            if img_k in self.additional_images:
-                mask_value = example[img_k] # right now, handle for mask
-                if isinstance(mask_value, list):
-                    masks.extend(mask_value)
-                else:
-                    masks.append(mask_value)
-                continue
-
             value = example[img_k]
 
             if isinstance(value, list):
                 images.extend(value)
             else:
                 images.append(value)
+
+        for mask_key in self.additional_images:
+            if mask_key not in example or example[mask_key] is None:
+                continue
+            mask_value = example[mask_key]
+            if isinstance(mask_value, list):
+                masks.extend(mask_value)
+            else:
+                masks.append(mask_value)
 
 
         if 'sft' in self.temp_for:
@@ -180,7 +180,14 @@ class Template:
                 "text": f"{example[text_col]}\n",
             }
 
-        image_content_resolve = {f"{image_col}": [{"type":"image"} for _ in range(0,len(example[image_col]) if isinstance(example[image_col],list) else 1)] for image_col in image if example[image_col] is not None}
+        image_content_resolve = {
+            f"{image_col}": [
+                {"type": "image"}
+                for _ in range(0, len(example[image_col]) if isinstance(example[image_col], list) else 1)
+            ]
+            for image_col in image
+            if image_col not in self.additional_images and example[image_col] is not None
+        }
 
         extends_content = text_content_resolve | image_content_resolve
 

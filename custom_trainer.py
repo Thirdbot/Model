@@ -182,7 +182,7 @@ def train_model(model_repo_id,
 
 if __name__ == "__main__":
     key_map = {
-        "image": ["images", "masks"],
+        "image": ["images"],
         "text": ["instruction", "question", "evidence", "answer"],
     }
 
@@ -192,10 +192,10 @@ if __name__ == "__main__":
         "assistant": ["evidence", "answer"],
     }
 
-    train_model(model_repo_id="geshang/Seg-R1-3B",
+    train_model(model_repo_id="Qwen/Qwen2-VL-2B-Instruct",
                 dataset_repo_id="thirdExec/synthetic-seismic-vlm",
                 unsloth_mode=False,
-                load_in_n_bit=4,
+                load_in_n_bit=8,
                 key_map=key_map,
                 key_owner=key_owner,
                 add_prompt_gen=False,

@@ -159,6 +159,8 @@ class Collator:
                 continue
 
             raw_text = examples[idx].get("text", "")
+            if not raw_text and "messages" in examples[idx]:
+                raw_text = self._format_messages(examples[idx]["messages"])
             raw_seg_count = raw_text.count(SEG_TOKEN)
             raise ValueError(
                 "SEG/mask mismatch in collator: "
