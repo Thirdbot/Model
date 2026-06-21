@@ -92,7 +92,7 @@ def generate_one(model,tokenizer, processor, example, max_new_tokens=512):
     batch = to_device(batch, device)
 
     generated = model.generate(
-        **batch,
+        *batch,
         max_new_tokens=max_new_tokens,
         do_sample=False,
         temperature=None,
