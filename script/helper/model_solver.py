@@ -141,10 +141,12 @@ class ModelSolver:
         return self.load_trained_model(
             base_model=self.repo_id_or_model_path,
             adapter_path=adapter_path,
+            load_in_n_bit=self.load_in_n_bit,
+            bnb_config=self.bnb_config,
         )
 
     @staticmethod
-    def load_trained_model(base_model, adapter_path):
+    def load_trained_model(base_model, adapter_path, load_in_n_bit=None, bnb_config=None):
         adapter_path = Path(adapter_path)
         processor_path = adapter_path if adapter_path.exists() else base_model
         try:
@@ -152,10 +154,17 @@ class ModelSolver:
         except Exception:
             processor = AutoProcessor.from_pretrained(base_model, use_fast=False)
 
+        model_kwargs = {
+            "device_map": "auto",
+            "torch_dtype": "auto",
+        }
+        if load_in_n_bit in (4, 8):
+            model_kwargs["quantization_config"] = bnb_config
+            model_kwargs.pop("torch_dtype", None)
+
         model = AutoModelForImageTextToText.from_pretrained(
             base_model,
-            device_map="auto",
-            torch_dtype="auto",
+            **model_kwargs,
         )
 
         tokenizer = getattr(processor, "tokenizer", processor)
