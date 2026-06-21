@@ -54,18 +54,19 @@ def to_device(batch, device):
 
 
 def get_images(example):
-    images = example['images']
-    if images is None:
-        return None
-
-    if not isinstance(images, list):
-        images = [images]
-
     out = []
-    for image in images:
-        if getattr(image, "mode", None) != "RGB":
-            image = image.convert("RGB")
-        out.append(image)
+    for ex in example:
+        images = ex['images']
+
+        if images is None:
+            return None
+
+        if not isinstance(images, list):
+            images = [images]
+        for image in images:
+            if getattr(image, "mode", None) != "RGB":
+                image = image.convert("RGB")
+                out.append(image)
     return out
 
 
