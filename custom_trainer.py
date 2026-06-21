@@ -26,8 +26,17 @@ def load_mask_decoder_if_exists(mask_decoder, model_save_path, device="cuda"):
         if isinstance(ckpt, dict) and "mask_decoder_state_dict" in ckpt
         else ckpt
     )
-    mask_decoder.load_state_dict(state_dict)
+    current_state = mask_decoder.state_dict()
+    compatible_state = {
+        key: value
+        for key, value in state_dict.items()
+        if key in current_state and current_state[key].shape == value.shape
+    }
+    skipped = sorted(set(state_dict) - set(compatible_state))
+    mask_decoder.load_state_dict(compatible_state, strict=False)
     print(f"load local mask decoder from: {mask_decoder_path}")
+    if skipped:
+        print(f"skipped incompatible mask decoder keys: {skipped}")
     return mask_decoder
 
 

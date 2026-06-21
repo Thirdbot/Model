@@ -28,7 +28,7 @@ class MaskDecoder(nn.Module):
             nn.Linear(hidden_size, feature_channels),
         )
 
-        self.image_projection = nn.LazyConv2d(feature_channels, kernel_size=1)
+        self.image_projection = nn.Conv2d(feature_channels, feature_channels, kernel_size=1)
         self.decoder = nn.Sequential(
             nn.Conv2d(feature_channels, feature_channels, kernel_size=3, padding=1),
             nn.GroupNorm(8, feature_channels),
@@ -53,6 +53,7 @@ class MaskDecoder(nn.Module):
                 -1,
             )
         else:
+            image_features = self._match_feature_channels(image_features)
             image_features = self.image_projection(image_features)
 
         query = torch.sigmoid(self.query(seg_hidden)).unsqueeze(-1).unsqueeze(-1)
@@ -65,3 +66,22 @@ class MaskDecoder(nn.Module):
             mode="bilinear",
             align_corners=False,
         )
+
+    def _match_feature_channels(self, image_features):
+        channels = image_features.shape[1]
+        if channels == self.feature_channels:
+            return image_features
+
+        if channels > self.feature_channels:
+            groups = torch.tensor_split(
+                image_features,
+                self.feature_channels,
+                dim=1,
+            )
+            return torch.cat(
+                [group.mean(dim=1, keepdim=True) for group in groups],
+                dim=1,
+            )
+
+        pad = self.feature_channels - channels
+        return torch.nn.functional.pad(image_features, (0, 0, 0, 0, 0, pad))
