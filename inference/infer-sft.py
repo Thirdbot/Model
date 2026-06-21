@@ -172,21 +172,21 @@ def main():
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with out_path.open("w", encoding="utf-8") as f:
-        for i, example in enumerate(test_data):
-            pred = generate_one(
-                model=model,
-                tokenizer=tokenizer,
-                processor=processor,
-                example=example,
-                max_new_tokens=512,
-            )
+        pred = generate_one(
+            model=model,
+            tokenizer=tokenizer,
+            processor=processor,
+            example=test_data,
+            max_new_tokens=512,
+        )
 
+        for i,pred in enumerate(pred):
             preview_path = save_preview(
-                example=example,
+                example=test_data,
                 prediction=pred,
                 out_dir="logs/inference_previews",
                 idx=i,
-            )
+                )
 
             row = {
                 "idx": i,
@@ -194,8 +194,8 @@ def main():
                 "preview_path": str(preview_path),
             }
 
-            if "text" in example:
-                row["prompt"] = example["text"]
+            if "message" in test_data[i]:
+                row["prompt"] = test_data[i]["message"]['user']['content']
 
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
