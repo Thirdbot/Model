@@ -34,6 +34,23 @@ class Collator:
             add_generation_prompt=True,
         )
 
+    @staticmethod
+    def _assistant_messages(messages):
+        return [
+            message
+            for message in messages
+            if message.get("role") == "assistant"
+        ]
+
+    def _format_assistant_messages(self, messages):
+        assistant_messages = self._assistant_messages(messages)
+        return "\n".join(
+            str(content.get("text", ""))
+            for message in assistant_messages
+            for content in message.get("content", [])
+            if isinstance(content, dict) and content.get("type") == "text"
+        )
+
 
     def vision_language_collate(self,examples):
         texts = [self._format_messages(ex["messages"]) for ex in examples]
@@ -153,14 +170,17 @@ class Collator:
         if self.seg_token_id is None or self.seg_token_id < 0:
             raise ValueError(f"{SEG_TOKEN} is not registered in the tokenizer.")
 
-        seg_counts = batch["input_ids"].eq(self.seg_token_id).sum(dim=1).tolist()
+        seg_counts = (
+            batch["input_ids"].eq(self.seg_token_id)
+            & batch["labels"].ne(-100)
+        ).sum(dim=1).tolist()
         for idx, (seg_count, mask_count) in enumerate(zip(seg_counts, mask_counts)):
             if seg_count == mask_count:
                 continue
 
             raw_text = examples[idx].get("text", "")
             if not raw_text and "messages" in examples[idx]:
-                raw_text = self._format_messages(examples[idx]["messages"])
+                raw_text = self._format_assistant_messages(examples[idx]["messages"])
             raw_seg_count = raw_text.count(SEG_TOKEN)
             raise ValueError(
                 "SEG/mask mismatch in collator: "
