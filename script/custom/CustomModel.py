@@ -2,8 +2,15 @@ import torch
 import torch.nn.functional as F
 
 
-def get_seg_hidden(hidden, input_ids, seg_token_id):
+def get_seg_mask(input_ids, seg_token_id, labels=None):
     seg_pos = input_ids.eq(seg_token_id)  # [B, L]
+    if labels is not None:
+        seg_pos = seg_pos & labels.ne(-100)
+    return seg_pos
+
+
+def get_seg_hidden(hidden, input_ids, seg_token_id, labels=None):
+    seg_pos = get_seg_mask(input_ids, seg_token_id, labels=labels)
 
     if not seg_pos.any():
         raise ValueError("No <SEG> token found in batch.")
@@ -13,8 +20,8 @@ def get_seg_hidden(hidden, input_ids, seg_token_id):
     return hidden[b_idx, t_idx]  # [num_seg_tokens, D]
 
 
-def get_seg_counts(input_ids, seg_token_id):
-    return input_ids.eq(seg_token_id).sum(dim=1).tolist()
+def get_seg_counts(input_ids, seg_token_id, labels=None):
+    return get_seg_mask(input_ids, seg_token_id, labels=labels).sum(dim=1).tolist()
 
 
 def get_image_features(outputs, seg_counts, num_seg_tokens):
@@ -95,13 +102,19 @@ class VLMWithMaskDecoder(torch.nn.Module):
         text_loss = outputs.loss
 
         hidden = outputs.hidden_states[-1]
-        seg_pos = batch["input_ids"].eq(self.seg_token_id)
+        labels = batch.get("labels")
+        seg_pos = get_seg_mask(batch["input_ids"], self.seg_token_id, labels=labels)
 
         if seg_pos.sum().item() == 0:
             raise ValueError("No <SEG> token found in batch.")
 
-        seg_counts = get_seg_counts(batch["input_ids"], self.seg_token_id)
-        seg_hidden = get_seg_hidden(hidden, batch["input_ids"], self.seg_token_id)
+        seg_counts = get_seg_counts(batch["input_ids"], self.seg_token_id, labels=labels)
+        seg_hidden = get_seg_hidden(
+            hidden,
+            batch["input_ids"],
+            self.seg_token_id,
+            labels=labels,
+        )
         decoder_param = next(self.mask_decoder.parameters())
 
         seg_hidden = seg_hidden.to(
