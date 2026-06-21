@@ -14,7 +14,7 @@ class WandbLogger:
     def __init__(self,
                   project="model",
                   run_name=None,
-                  mode="online",
+                  mode="offline",
                   entity=None,
                   group=None,
                   tags=None,

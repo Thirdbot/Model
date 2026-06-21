@@ -1,7 +1,7 @@
 # infer_sft.py
 import json
 from pathlib import Path
-
+from script.helper.Collator import Collator
 import torch
 
 from script.helper.FolderManager import manager
@@ -83,16 +83,9 @@ def clean_prediction(text):
 
 
 @torch.inference_mode()
-def generate_one(model, processor, example, max_new_tokens=512):
-    text = example["text"]
-    images = get_images(example)
-
-    batch = processor(
-        text=[text],
-        images=images,
-        padding=True,
-        return_tensors="pt",
-    )
+def generate_one(model,tokenizer, processor, example, max_new_tokens=512):
+    batch = Collator(tokenizer=tokenizer, processor=processor,
+                               set_add_generation_prompt=True).vision_language_collate(example)
 
     device = next(model.parameters()).device
     batch = to_device(batch, device)
@@ -116,7 +109,7 @@ def generate_one(model, processor, example, max_new_tokens=512):
 def main():
     manager()
 
-    model_name = "geshang/Seg-R1-3B"
+    model_name = "Qwen/Qwen2-VL-2B-Instruct"
     dataset_name = "thirdExec/synthetic-seismic-vlm"
 
     # Load base solver only so we can call your saved-model loader.
@@ -182,6 +175,7 @@ def main():
         for i, example in enumerate(test_data):
             pred = generate_one(
                 model=model,
+                tokenizer=tokenizer,
                 processor=processor,
                 example=example,
                 max_new_tokens=512,
