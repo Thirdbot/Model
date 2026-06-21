@@ -30,6 +30,28 @@ def load_mask_decoder_if_exists(mask_decoder, model_save_path, device="cuda"):
     return mask_decoder
 
 
+def load_resume_model_with_fallback(model_solver, dataset_repo_id, resume_model_type, fallback_model_type="sft"):
+    model_types = [resume_model_type]
+    if fallback_model_type and fallback_model_type not in model_types:
+        model_types.append(fallback_model_type)
+
+    last_error = None
+    for model_type in model_types:
+        try:
+            model, processor = model_solver.load_save_model(
+                at_dataset=dataset_repo_id,
+                method=model_type,
+            )
+            print(f"load local {model_type} model from: {model_solver.repo_id_or_model_path}/{dataset_repo_id}")
+            return model, processor, model_type
+        except Exception as error:
+            last_error = error
+            print(f"could not load local {model_type} model")
+
+    print(f"could not load local model, will train from scratch: {last_error}")
+    return None, None, None
+
+
 def train_model(model_repo_id,
                 dataset_repo_id,
                 unsloth_mode=False,
@@ -40,7 +62,7 @@ def train_model(model_repo_id,
                 epochs=1,
                 batch_size=1,
                 train_mode='custom_sft',
-                resume_model_type='sft',
+                resume_model_type='custom_sft',
                 lambda_mask=2.0,
                 bce_weight=1.0,
                 dice_weight=2.0,
@@ -75,17 +97,17 @@ def train_model(model_repo_id,
         model, tokenizer = loaded_model[:2]
         processor = loaded_model[-1] if len(loaded_model) == 3 else None
 
-        try:
-            #load local if exists
-            model, processor = model_solver.load_save_model(
-                at_dataset=dataset_repo_id,
-                method=resume_model_type,
-            )
-            print(f"load local model from:{model_repo_id}/{dataset_repo_id}")
+        resumed_model, resumed_processor, loaded_model_type = load_resume_model_with_fallback(
+            model_solver=model_solver,
+            dataset_repo_id=dataset_repo_id,
+            resume_model_type=resume_model_type,
+            fallback_model_type="sft",
+        )
+        if resumed_model is not None:
+            model = resumed_model
+            processor = resumed_processor
+            tokenizer = getattr(processor, "tokenizer", tokenizer)
             is_peft_applied = True
-
-        except Exception as e:
-            print("could not load local model, will train from scratch")
 
         dataset_solver, dataset = solve_dataset(dataset_repo_id)
         dataset = dataset["train"]
