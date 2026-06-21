@@ -130,7 +130,8 @@ def train_mask_decoder_loop(
                             "train/weighted_bce_loss": weighted_bce_value,
                             "train/dice_loss": dice_value,
                             "train/epoch": epoch + 1,
-                            "train/step": step,
+                            "train/global_step": global_step,
+                            "train/batch_step": step,
                         },
                         step=global_step,
                     )

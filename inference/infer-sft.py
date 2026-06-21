@@ -55,18 +55,17 @@ def to_device(batch, device):
 
 def get_images(example):
     out = []
-    for ex in example:
-        images = ex['images']
+    images = example.get("images")
 
-        if images is None:
-            return None
+    if images is None:
+        return None
 
-        if not isinstance(images, list):
-            images = [images]
-        for image in images:
-            if getattr(image, "mode", None) != "RGB":
-                image = image.convert("RGB")
-                out.append(image)
+    if not isinstance(images, list):
+        images = [images]
+    for image in images:
+        if getattr(image, "mode", None) != "RGB":
+            image = image.convert("RGB")
+        out.append(image)
     return out
 
 
@@ -85,14 +84,19 @@ def clean_prediction(text):
 
 @torch.inference_mode()
 def generate_one(model,tokenizer, processor, example, max_new_tokens=512):
-    batch = Collator(tokenizer=tokenizer, processor=processor,
-                               set_add_generation_prompt=True).vision_language_collate(example)
+    batch = Collator(
+        tokenizer=tokenizer,
+        processor=processor,
+        set_add_generation_prompt=True,
+    ).vision_language_collate([example])
+
+    batch.pop("labels", None)
 
     device = next(model.parameters()).device
     batch = to_device(batch, device)
 
     generated = model.generate(
-        *batch,
+        **batch,
         max_new_tokens=max_new_tokens,
         do_sample=False,
         temperature=None,
@@ -173,17 +177,16 @@ def main():
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with out_path.open("w", encoding="utf-8") as f:
-        pred = generate_one(
-            model=model,
-            tokenizer=tokenizer,
-            processor=processor,
-            example=test_data,
-            max_new_tokens=512,
-        )
-
-        for i,pred in enumerate(pred):
+        for i, example in enumerate(test_data):
+            pred = generate_one(
+                model=model,
+                tokenizer=tokenizer,
+                processor=processor,
+                example=example,
+                max_new_tokens=512,
+            )
             preview_path = save_preview(
-                example=test_data,
+                example=example,
                 prediction=pred,
                 out_dir="logs/inference_previews",
                 idx=i,
@@ -195,8 +198,8 @@ def main():
                 "preview_path": str(preview_path),
             }
 
-            if "message" in test_data[i]:
-                row["prompt"] = test_data[i]["message"]['user']['content']
+            if "messages" in example:
+                row["prompt"] = example["messages"]
 
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 

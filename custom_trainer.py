@@ -23,9 +23,9 @@ def train_model(model_repo_id,
                 batch_size=1,
                 train_mode='custom_sft',
                 resume_model_type='sft',
-                lambda_mask=1.0,
+                lambda_mask=2.0,
                 bce_weight=1.0,
-                dice_weight=1.0,
+                dice_weight=2.0,
                 wandb_logger=None,
                 ):
     wandb_logger = wandb_logger or WandbLogger(
