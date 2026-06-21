@@ -93,10 +93,15 @@ def train_model(model_repo_id,
                 epochs=1,
                 batch_size=1,
                 train_mode='custom_sft',
-                resume_model_type='sft',
-                lambda_mask=2.0,
-                bce_weight=1.0,
+                resume_model_type='custom_sft',
+                lambda_mask=1.0,
+                bce_weight=0.5,
                 dice_weight=2.0,
+                text_loss_weight=0.0,
+                freeze_vlm=True,
+                mask_lr=1e-4,
+                vlm_lr=1e-5,
+                grad_accum_steps=1,
                 wandb_logger=None,
                 ):
     wandb_logger = wandb_logger or WandbLogger(
@@ -113,6 +118,11 @@ def train_model(model_repo_id,
             "lambda_mask": lambda_mask,
             "bce_weight": bce_weight,
             "dice_weight": dice_weight,
+            "text_loss_weight": text_loss_weight,
+            "freeze_vlm": freeze_vlm,
+            "mask_lr": mask_lr,
+            "vlm_lr": vlm_lr,
+            "grad_accum_steps": grad_accum_steps,
         },
     )
     wandb_logger.start()
@@ -198,6 +208,7 @@ def train_model(model_repo_id,
             lambda_mask=lambda_mask,
             bce_weight=bce_weight,
             dice_weight=dice_weight,
+            text_loss_weight=text_loss_weight,
         )
 
         model = train_mask_decoder_loop(
@@ -206,9 +217,28 @@ def train_model(model_repo_id,
             epochs=epochs,
             peft_config=model_solver.peft_config if not is_peft_applied else None,
             device="cuda",
+            freeze_vlm=freeze_vlm,
+            mask_lr=mask_lr,
+            vlm_lr=vlm_lr,
+            grad_accum_steps=grad_accum_steps,
             wandb_logger=wandb_logger,
         )
-        save_vlm_and_mask_decoder(model, tokenizer, processor,output_dir=model_save_path)
+        save_vlm_and_mask_decoder(
+            model,
+            tokenizer,
+            processor,
+            output_dir=model_save_path,
+            extra_config={
+                "lambda_mask": lambda_mask,
+                "bce_weight": bce_weight,
+                "dice_weight": dice_weight,
+                "text_loss_weight": text_loss_weight,
+                "freeze_vlm": freeze_vlm,
+                "mask_lr": mask_lr,
+                "vlm_lr": vlm_lr,
+                "grad_accum_steps": grad_accum_steps,
+            },
+        )
     finally:
         wandb_logger.finish()
 
@@ -232,5 +262,13 @@ if __name__ == "__main__":
                 key_owner=key_owner,
                 add_prompt_gen=False,
                 train_mode='custom_sft',
+                resume_model_type='sft',
+                freeze_vlm=True,
+                mask_lr=1e-4,
+                vlm_lr=1e-5,
+                lambda_mask=1.0,
+                bce_weight=0.5,
+                dice_weight=2.0,
+                text_loss_weight=0.0,
                 epochs=100,
                 batch_size=1)

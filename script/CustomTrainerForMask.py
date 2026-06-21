@@ -32,6 +32,9 @@ def train_mask_decoder_loop(
     epochs=10,
     peft_config=None,
     lr=2e-5,
+    mask_lr=None,
+    vlm_lr=None,
+    freeze_vlm=False,
     grad_accum_steps=1,
     device="cuda",
     wandb_logger=None,
@@ -42,15 +45,54 @@ def train_mask_decoder_loop(
         model.vlm = prepare_model_for_kbit_training(model.vlm)
         model.vlm = get_peft_model(model.vlm, peft_config)
 
+    if freeze_vlm:
+        model.vlm.eval()
+        for param in model.vlm.parameters():
+            param.requires_grad = False
+
     model.config.use_cache = False
     model.train()
+    if freeze_vlm:
+        model.vlm.eval()
+        model.mask_decoder.train()
 
-    params = [
-        p for p in list(model.parameters())
+    mask_lr = mask_lr or lr
+    vlm_lr = vlm_lr or lr
+    param_groups = []
+
+    mask_params = [
+        p for p in model.mask_decoder.parameters()
         if p.requires_grad
     ]
+    if mask_params:
+        param_groups.append({"params": mask_params, "lr": mask_lr})
 
-    optimizer = torch.optim.AdamW(params, lr=lr)
+    vlm_params = [
+        p for p in model.vlm.parameters()
+        if p.requires_grad
+    ]
+    if vlm_params:
+        param_groups.append({"params": vlm_params, "lr": vlm_lr})
+
+    if not param_groups:
+        raise ValueError("No trainable parameters found for custom mask training.")
+
+    params = [
+        param
+        for group in param_groups
+        for param in group["params"]
+    ]
+
+    print(
+        "custom train config: "
+        f"freeze_vlm={freeze_vlm} "
+        f"mask_lr={mask_lr} "
+        f"vlm_lr={vlm_lr} "
+        f"trainable_mask_params={sum(p.numel() for p in mask_params)} "
+        f"trainable_vlm_params={sum(p.numel() for p in vlm_params)}"
+    )
+
+    optimizer = torch.optim.AdamW(param_groups)
 
     optimizer.zero_grad(set_to_none=True)
     ...
@@ -88,15 +130,15 @@ def train_mask_decoder_loop(
                 weighted_bce_loss = getattr(outputs, "weighted_bce_loss", None)
                 dice_loss = getattr(outputs, "dice_loss", None)
 
-            loss.backward()
+            (loss / grad_accum_steps).backward()
 
-            if global_step % grad_accum_steps == 0:
+            if (global_step + 1) % grad_accum_steps == 0:
                 torch.nn.utils.clip_grad_norm_(params, 1.0)
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
             if global_step % 10 == 0:
-                loss_value = loss.item() * grad_accum_steps
+                loss_value = loss.item()
                 text_loss_value = text_loss.item()
                 mask_loss_value = (
                     mask_loss.item()
@@ -114,7 +156,8 @@ def train_mask_decoder_loop(
                     else float("nan")
                 )
                 print(
-                    f"step={step} "
+                    f"global_step={global_step} "
+                    f"batch_step={step} "
                     f"loss={loss_value:.4f} "
                     f"text loss={text_loss_value:.4f} "
                     f"mask loss={mask_loss_value:.4f} "
@@ -122,13 +165,26 @@ def train_mask_decoder_loop(
                     f"dice={dice_value:.4f}"
                 )
                 if wandb_logger is not None and wandb_logger.run is not None:
+                    text_loss_weight = (
+                        outputs.get("text_loss_weight", None)
+                        if isinstance(outputs, dict)
+                        else getattr(outputs, "text_loss_weight", None)
+                    )
                     wandb_logger.run.log(
                         {
                             "train/loss": loss_value,
                             "train/text_loss": text_loss_value,
+                            "train/text_loss_weight": (
+                                text_loss_weight
+                                if text_loss_weight is not None
+                                else float("nan")
+                            ),
                             "train/mask_loss": mask_loss_value,
                             "train/weighted_bce_loss": weighted_bce_value,
                             "train/dice_loss": dice_value,
+                            "train/mask_lr": mask_lr,
+                            "train/vlm_lr": vlm_lr,
+                            "train/freeze_vlm": float(freeze_vlm),
                             "train/epoch": epoch + 1,
                             "train/global_step": global_step,
                             "train/batch_step": step,
@@ -136,6 +192,11 @@ def train_mask_decoder_loop(
                         step=global_step,
                     )
             global_step += 1
+
+        if global_step % grad_accum_steps != 0:
+            torch.nn.utils.clip_grad_norm_(params, 1.0)
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
 
     return model
 

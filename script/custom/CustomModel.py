@@ -72,6 +72,7 @@ class VLMWithMaskDecoder(torch.nn.Module):
         lambda_mask=1.0,
         bce_weight=1.0,
         dice_weight=1.0,
+        text_loss_weight=1.0,
     ):
         super().__init__()
         self.vlm = vlm
@@ -80,6 +81,7 @@ class VLMWithMaskDecoder(torch.nn.Module):
         self.lambda_mask = lambda_mask
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
+        self.text_loss_weight = text_loss_weight
         self.config = vlm.config
         self.generation_config = getattr(vlm, "generation_config", None)
 
@@ -185,11 +187,12 @@ class VLMWithMaskDecoder(torch.nn.Module):
         )
 
         mask_loss = self.bce_weight * weighted_bce + self.dice_weight * dice
-        loss = text_loss + self.lambda_mask * mask_loss
+        loss = self.text_loss_weight * text_loss + self.lambda_mask * mask_loss
 
         return {
             "loss": loss,
             "text_loss": text_loss,
+            "text_loss_weight": self.text_loss_weight,
             "mask_loss": mask_loss,
             "weighted_bce_loss": weighted_bce,
             "dice_loss": dice,
