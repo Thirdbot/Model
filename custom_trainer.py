@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import torch
 from torch.utils.data import DataLoader
 
 from configs import load_config
@@ -10,6 +11,23 @@ from script.WandbLogger import WandbLogger
 from script.helper.Collator import Collator
 from script.helper.MaskDecoder import MaskDecoder
 from script.custom.CustomModel import VLMWithMaskDecoder
+
+
+def load_mask_decoder_if_exists(mask_decoder, model_save_path, device="cuda"):
+    mask_decoder_path = model_save_path / "mask_decoder.pt"
+    if not mask_decoder_path.exists():
+        print("could not load local mask decoder, will train from scratch")
+        return mask_decoder
+
+    ckpt = torch.load(mask_decoder_path, map_location=device)
+    state_dict = (
+        ckpt["mask_decoder_state_dict"]
+        if isinstance(ckpt, dict) and "mask_decoder_state_dict" in ckpt
+        else ckpt
+    )
+    mask_decoder.load_state_dict(state_dict)
+    print(f"load local mask decoder from: {mask_decoder_path}")
+    return mask_decoder
 
 
 def train_model(model_repo_id,
@@ -106,10 +124,18 @@ def train_model(model_repo_id,
             collate_fn=collator.tasks_collate,
         )
 
+        root_path = Path(load_config("paths")['root'])
+        model_save_path = root_path / load_config("paths")['dirs']['saves'] / train_mode / model_repo_id / dataset_repo_id  # grpo / sft / custom_*
+
         hidden_size = model.config.hidden_size
         mask_decoder = MaskDecoder(
             hidden_size=hidden_size,
         ).cuda()
+        mask_decoder = load_mask_decoder_if_exists(
+            mask_decoder=mask_decoder,
+            model_save_path=model_save_path,
+            device="cuda",
+        )
 
         custom_model = VLMWithMaskDecoder(
             vlm=model,
@@ -128,8 +154,6 @@ def train_model(model_repo_id,
             device="cuda",
             wandb_logger=wandb_logger,
         )
-        root_path = Path(load_config("paths")['root'])
-        model_save_path = root_path / load_config("paths")['dirs']['saves'] / train_mode / model_repo_id / dataset_repo_id  # grpo / sft / custom_*
         save_vlm_and_mask_decoder(model, tokenizer, processor,output_dir=model_save_path)
     finally:
         wandb_logger.finish()

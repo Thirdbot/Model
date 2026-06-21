@@ -168,6 +168,13 @@ def save_vlm_and_mask_decoder(
         {
             "mask_decoder_state_dict": model.mask_decoder.state_dict(),
             "mask_decoder_class": model.mask_decoder.__class__.__name__,
+            "mask_decoder_config": {
+                "width_size": getattr(model.mask_decoder, "width_size", None),
+                "height_size": getattr(model.mask_decoder, "height_size", None),
+                "feature_channels": getattr(model.mask_decoder, "feature_channels", None),
+                "feature_height": getattr(model.mask_decoder, "feature_height", None),
+                "feature_width": getattr(model.mask_decoder, "feature_width", None),
+            },
             "extra_config": extra_config or {},
         },
         output_dir.joinpath("mask_decoder.pt"),
