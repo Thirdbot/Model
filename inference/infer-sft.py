@@ -54,7 +54,7 @@ def to_device(batch, device):
 
 
 def get_images(example):
-    images = example.get("images", None)
+    images = example['images']
     if images is None:
         return None
 
