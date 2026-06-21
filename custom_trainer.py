@@ -10,6 +10,7 @@ from script.DatatemplateEditor import Template
 from script.WandbLogger import WandbLogger
 from script.helper.Collator import Collator
 from script.helper.MaskDecoder import MaskDecoder
+from script.helper.special_tokens import SEG_TOKEN
 from script.custom.CustomModel import VLMWithMaskDecoder
 
 
@@ -50,6 +51,36 @@ def load_resume_model_with_fallback(model_solver, dataset_repo_id, resume_model_
 
     print(f"could not load local model, will train from scratch: {last_error}")
     return None, None, None
+
+
+def _count_items(value):
+    if value is None:
+        return 0
+    if isinstance(value, list):
+        return len(value)
+    return 1
+
+
+def filter_mask_aligned_dataset(dataset):
+    total = len(dataset)
+
+    def is_aligned(example):
+        seg_count = str(example.get("evidence", "")).count(SEG_TOKEN)
+        mask_count = _count_items(example.get("masks"))
+        return seg_count > 0 and seg_count == mask_count
+
+    filtered = dataset.filter(is_aligned)
+    skipped = total - len(filtered)
+    print(
+        f"custom mask dataset alignment: kept={len(filtered)} "
+        f"skipped={skipped} total={total}"
+    )
+    if len(filtered) == 0:
+        raise ValueError(
+            f"No custom mask training rows left after filtering. "
+            f"Every row needs evidence.count({SEG_TOKEN!r}) == len(masks)."
+        )
+    return filtered
 
 
 def train_model(model_repo_id,
@@ -111,6 +142,7 @@ def train_model(model_repo_id,
 
         dataset_solver, dataset = solve_dataset(dataset_repo_id)
         dataset = dataset["train"]
+        dataset = filter_mask_aligned_dataset(dataset)
 
         template = Template(
             dataset=dataset,

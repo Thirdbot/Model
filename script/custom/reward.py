@@ -4,8 +4,9 @@ import re
 
 class SegmentationReward:
     BBOX_PATTERN = re.compile(r"<bbox>\s*(\[.*?\])\s*</bbox>", re.DOTALL)
-    POINTS_PATTERN = re.compile(r"<points>\s*(\[.*?\])\s*</points>", re.DOTALL)
-    LABELS_PATTERN = re.compile(r"<labels>\s*(\[.*?\])\s*</labels>", re.DOTALL)
+    REGION_PATTERN = re.compile(r"<region>.*?</region>", re.DOTALL)
+    EVIDENCE_PATTERN = re.compile(r"<evidence>.*?</evidence>", re.DOTALL)
+    ANSWER_PATTERN = re.compile(r"<answer>.*?</answer>", re.DOTALL)
 
     def __init__(self, format_weight=1.0, bbox_weight=2.0, empty_penalty=-1.0):
         self.format_weight = format_weight
@@ -22,10 +23,11 @@ class SegmentationReward:
 
             score = 0.0
             parsed = self._parse_prediction(text)
-            score += 0.4 if parsed["bbox"] is not None else 0.0
-            score += 0.25 if parsed["points"] is not None else 0.0
-            score += 0.25 if parsed["labels"] is not None else 0.0
-            score += 0.1 if parsed["valid"] else 0.0
+            score += 0.25 if parsed["regions"] else 0.0
+            score += 0.25 if parsed["bboxes"] else 0.0
+            score += 0.2 if parsed["evidence_count"] > 0 else 0.0
+            score += 0.15 if parsed["seg_count"] == len(parsed["regions"]) and parsed["seg_count"] > 0 else 0.0
+            score += 0.15 if parsed["has_answer"] else 0.0
             rewards.append(score * self.format_weight)
         return rewards
 
@@ -34,13 +36,19 @@ class SegmentationReward:
         rewards = []
         for completion, expected in zip(completions, targets):
             pred_text = self._completion_to_text(completion)
-            pred_bbox = self._parse_prediction(pred_text)["bbox"]
-            target_bbox = self._parse_prediction(str(expected))["bbox"]
+            pred_bboxes = self._parse_prediction(pred_text)["bboxes"]
+            target_bboxes = self._parse_prediction(str(expected))["bboxes"]
 
-            if pred_bbox is None or target_bbox is None:
+            if not pred_bboxes or not target_bboxes:
                 rewards.append(0.0)
                 continue
-            rewards.append(self._bbox_iou(pred_bbox, target_bbox) * self.bbox_weight)
+
+            best_iou = max(
+                self._bbox_iou(pred_bbox, target_bbox)
+                for pred_bbox in pred_bboxes
+                for target_bbox in target_bboxes
+            )
+            rewards.append(best_iou * self.bbox_weight)
         return rewards
 
     def combined_reward(self, completions, target=None, **kwargs):
@@ -49,30 +57,30 @@ class SegmentationReward:
         return [format_score + iou_score for format_score, iou_score in zip(format_scores, iou_scores)]
 
     def _parse_prediction(self, text):
-        bbox = self._extract_literal(text, self.BBOX_PATTERN)
-        points = self._extract_literal(text, self.POINTS_PATTERN)
-        labels = self._extract_literal(text, self.LABELS_PATTERN)
-
-        bbox = bbox if self._valid_bbox(bbox) else None
-        points = points if isinstance(points, list) else None
-        labels = labels if isinstance(labels, list) else None
+        bboxes = [
+            bbox
+            for bbox in self._extract_literals(text, self.BBOX_PATTERN)
+            if self._valid_bbox(bbox)
+        ]
+        regions = self.REGION_PATTERN.findall(text)
 
         return {
-            "bbox": bbox,
-            "points": points,
-            "labels": labels,
-            "valid": bbox is not None and points is not None and labels is not None,
+            "bboxes": bboxes,
+            "regions": regions,
+            "evidence_count": len(self.EVIDENCE_PATTERN.findall(text)),
+            "seg_count": text.count("<SEG>"),
+            "has_answer": self.ANSWER_PATTERN.search(text) is not None,
         }
 
     @staticmethod
-    def _extract_literal(text, pattern):
-        match = pattern.search(text)
-        if match is None:
-            return None
-        try:
-            return ast.literal_eval(match.group(1))
-        except (SyntaxError, ValueError):
-            return None
+    def _extract_literals(text, pattern):
+        values = []
+        for match in pattern.finditer(text):
+            try:
+                values.append(ast.literal_eval(match.group(1)))
+            except (SyntaxError, ValueError):
+                continue
+        return values
 
     @staticmethod
     def _valid_bbox(value):

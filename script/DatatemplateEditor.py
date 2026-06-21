@@ -150,7 +150,12 @@ class Template:
                     target_parts.append(str(value))
 
             solution = "\n".join(target_parts)
-            extend_data = {"prompt":prompt,"images":images,"target":solution}
+            extend_data = {
+                "prompt": prompt,
+                "images": images,
+                "target": solution,
+                "solution": solution,
+            }
             return extend_data
         else:
             return None
